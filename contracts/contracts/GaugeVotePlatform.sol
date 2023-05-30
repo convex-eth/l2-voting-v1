@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
+import "./interfaces/IDelegation.sol";
 import "../node_modules/@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
-interface DelegationInterface {
-    function getDelegate(address _user) external view returns (address);
-}
+
 /*
     Main Gauge Vote Platform contract
 */
 contract GaugeVotePlatform{
 
-    address public operator;
+    address public owner;
+    address public pendingowner;
+    mapping(address => bool) public operators;
 
-    DelegationInterface public delegation;
+    IDelegation public delegation;
 
     struct UserInfo {
         uint256 baseWeight; //original weight
@@ -25,7 +26,6 @@ contract GaugeVotePlatform{
         bytes32 baseWeightMerkleRoot; //merkle root to provide user base weights 
         uint256 startTime; //start timestamp
         uint256 endTime; //end timestamp
-        uint256 choices; //number of choices
     }
 
     struct Vote {
@@ -41,7 +41,6 @@ contract GaugeVotePlatform{
     }
 
     function vote(uint256 _proposalId, address[] memory _gauges, uint256[] memory _weights) public {
-        require(_weights.length == proposals[_proposalId].choices, "Invalid number of choices");
         require(block.timestamp >= proposals[_proposalId].startTime, "Voting not started");
         require(block.timestamp <= proposals[_proposalId].endTime, "Voting ended");
         require(_gauges.length == _weights.length, "Array length mismatch");
@@ -66,43 +65,72 @@ contract GaugeVotePlatform{
         bytes32 node = keccak256(abi.encodePacked(index, msg.sender, _baseWeight));
         require(MerkleProof.verify(proofs, proposals[_proposalId].baseWeightMerkleRoot, node), 'Invalid proof.');
         userInfo[_proposalId][msg.sender].baseWeight = _baseWeight;
+        emit UserWeightChange(_proposalId, msg.sender, _baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
+
+
         address delegate = delegation.getDelegate(msg.sender);
         if(delegate != msg.sender) {
             userInfo[_proposalId][delegate].adjustedWeight -= int256(_baseWeight);
+            emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
         }
     }
 
 
-    function setOperator(address _operator) public isOperator {
-        operator = _operator;
+    function setDelegationContract(address _delegation) public onlyOwner {
+        delegation = IDelegation(_delegation);
+        emit DelegationChange(_delegation);
     }
 
-    function setDelegationContract(address _delegation) public isOperator {
-        delegation = DelegationInterface(_delegation);
-    }
-
-    function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime, uint256 _choices) public isOperator {
+    function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime) public onlyOperator {
         proposals.push(Proposal({
             baseWeightMerkleRoot: _baseWeightMerkleRoot,
             startTime: _startTime,
-            endTime: _endTime,
-            choices: _choices
+            endTime: _endTime
         }));
-        emit NewProposal(proposals.length-1, _baseWeightMerkleRoot, _startTime, _endTime, _choices);
+        emit NewProposal(proposals.length-1, _baseWeightMerkleRoot, _startTime, _endTime);
     }
 
-    modifier isOperator() {
-        require(operator == msg.sender, "Unauthorized");
+    function transferOwnership(address _owner) external onlyOwner{
+        pendingowner = _owner;
+        emit TransferOwnership(_owner);
+    }
+
+    function acceptOwnership() external {
+        require(pendingowner == msg.sender, "!pendingowner");
+        owner = pendingowner;
+        pendingowner = address(0);
+        emit AcceptedOwnership(owner);
+    }
+
+    function setOperator(address _op, bool _active) external onlyOwner{
+        operators[_op] = _active;
+        emit OperatorSet(_op, _active);
+    }
+
+    modifier onlyOwner() {
+        require(owner == msg.sender, "!owner");
+        _;
+    }
+
+    modifier onlyOperator() {
+        require(operators[msg.sender] || owner == msg.sender, "!operator");
         _;
     }
 
 
     event VoteCast(uint256 indexed proposalId, address indexed user, uint256[] weights);
-    event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end, uint256 choices);
+    event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
+    event UserWeightChange(uint256 indexed pid, address indexed user, uint256 baseWeight, int256 adjustedWeight);
+    event TransferOwnership(address pendingOwner);
+    event AcceptedOwnership(address newOwner);
+    event OperatorSet(address indexed _op, bool _active);
+    event DelegationChange(address delgationContract);
 
     constructor(address delegationContract) {
-        operator = msg.sender;
-        delegation = DelegationInterface(delegationContract);
+        owner = msg.sender;
+        operators[msg.sender] = true;
+        delegation = IDelegation(delegationContract);
+        emit DelegationChange(delegationContract);
     }
 
 }
