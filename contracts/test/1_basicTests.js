@@ -1,9 +1,11 @@
 // const { BN, constants, expectEvent, expectRevert, time } = require('openzeppelin-test-helpers');
 const { BN, time } = require('openzeppelin-test-helpers');
 var jsonfile = require('jsonfile');
+const { assert } = require('chai');
 var contractList = jsonfile.readFileSync('./contracts.json');
 
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
+const Delegation = artifacts.require("Delegation");
 
 // const IERC20 = artifacts.require("IERC20");
 // const ERC20 = artifacts.require("ERC20");
@@ -135,7 +137,7 @@ const advanceTime = async (secondsElaspse) => {
 }
 const day = 86400;
 
-contract("Deploy System and test staking/rewards", async accounts => {
+contract("Deploy System and test", async accounts => {
   it("should deploy contracts and test various functions", async () => {
 
     let deployer = "0x947B7742C403f20e5FaCcDAc5E092C943E7D0277";
@@ -159,13 +161,37 @@ contract("Deploy System and test staking/rewards", async accounts => {
     console.log("\n\n >>>> Begin Tests >>>>")
 
     //system
-    var gaugeVotePlatform = await GaugeVotePlatform.new();
+    var delegation = await Delegation.new();
+    console.log("delegation: " +delegation.address)
+
+    var gaugeVotePlatform = await GaugeVotePlatform.new(delegation.address);
     console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
 
     console.log("\n\n --- deployed ----")
 
+    // test delegation
+    await delegation.setDelegate(userB, {from:userA});
+    cdelegate = await delegation.registry(userA, {from:userA});
+    console.log("UserA delegate registery:");
+    console.log("to :"+cdelegate.to);
+    console.log("start :"+cdelegate.start.toNumber());
+    console.log("expire :"+cdelegate.expiration.toNumber());
+    assert.equal(cdelegate.to, userB, "delegate to userB");
+
+    cdelegate = await delegation.getDelegate(userA, {from:userA});
+    console.log("UserA delegate current:"+cdelegate);
+    assert.equal(cdelegate, userA, "delegation current");
+    // advance time 1 week
+    await advanceTime(7*day);
+    cdelegate = await delegation.getDelegate(userA, {from:userA});
+    console.log("UserA delegate next epoch:"+cdelegate);
+    assert.equal(cdelegate, userB, "delegation next epoch");
+
+
+
     return;
   });
+
 });
 
 
