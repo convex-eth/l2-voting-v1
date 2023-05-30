@@ -28,13 +28,13 @@ contract GaugeVotePlatform{
         uint256 choices; //number of choices
     }
 
-    struct UserVote {
+    struct Vote {
         address[] gauges; //array of gauges to vote on
         uint256[] weights; //array of weights for each choice
     }
 
     Proposal[] public proposals;
-    mapping(uint256 => mapping(address => UserVote)) internal votes; // proposalId => user => Vote
+    mapping(uint256 => mapping(address => Vote)) internal votes; // proposalId => user => Vote
 
     function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory) {
         return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights);
