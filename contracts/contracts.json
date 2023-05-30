@@ -1,0 +1,8 @@
+{
+    "zksync": {
+        "system": {
+            "deployer": "0x947B7742C403f20e5FaCcDAc5E092C943E7D0277",
+            "multisig": "0x6111ABF720051309012FcdBc2910054E41dcFF8c"
+        }
+    }
+}
