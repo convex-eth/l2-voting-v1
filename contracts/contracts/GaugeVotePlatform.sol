@@ -40,7 +40,7 @@ contract GaugeVotePlatform{
         return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights);
     }
 
-    function vote(uint256 _proposalId, address[] memory _gauges, uint256[] memory _weights) public {
+    function vote(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights) public {
         require(block.timestamp >= proposals[_proposalId].startTime, "Voting not started");
         require(block.timestamp <= proposals[_proposalId].endTime, "Voting ended");
         require(_gauges.length == _weights.length, "Array length mismatch");
@@ -52,15 +52,15 @@ contract GaugeVotePlatform{
             votes[_proposalId][msg.sender].gauges.push(_gauges[i]);
             votes[_proposalId][msg.sender].weights.push(_weights[i]);
         }
-        emit VoteCast(_proposalId, msg.sender, _weights);
+        emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
     }
 
-    function voteWithProofs(uint256 _proposalId, address[] memory _gauges, uint256[] memory _weights, uint256 index, bytes32[] memory proofs, uint256 _baseWeight) public {
+    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, uint256 index, bytes32[] calldata proofs, uint256 _baseWeight) public {
         _supplyProofs(_proposalId, index, proofs, _baseWeight);
         vote(_proposalId, _gauges, _weights);
     }
 
-    function _supplyProofs(uint256 _proposalId, uint256 index, bytes32[] memory proofs, uint256 _baseWeight) internal {
+    function _supplyProofs(uint256 _proposalId, uint256 index, bytes32[] calldata proofs, uint256 _baseWeight) internal {
         require(userInfo[_proposalId][msg.sender].baseWeight == 0, "Proofs already supplied");
         bytes32 node = keccak256(abi.encodePacked(index, msg.sender, _baseWeight));
         require(MerkleProof.verify(proofs, proposals[_proposalId].baseWeightMerkleRoot, node), 'Invalid proof.');
@@ -118,7 +118,7 @@ contract GaugeVotePlatform{
     }
 
 
-    event VoteCast(uint256 indexed proposalId, address indexed user, uint256[] weights);
+    event VoteCast(uint256 indexed proposalId, address indexed user, address[] gauges, uint256[] weights);
     event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
     event UserWeightChange(uint256 indexed pid, address indexed user, uint256 baseWeight, int256 adjustedWeight);
     event TransferOwnership(address pendingOwner);
