@@ -15,12 +15,13 @@ contract GaugeVotePlatform{
     mapping(address => bool) public operators;
 
     IDelegation public delegation;
+    address public userManager;
 
     struct UserInfo {
         uint256 baseWeight; //original weight
         int256 adjustedWeight; //signed weight change via delegation change or updated user weight
     }
-    mapping(uint256 => mapping(address => UserInfo)) public userInfo;
+    mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
 
     struct Proposal {
         bytes32 baseWeightMerkleRoot; //merkle root to provide user base weights 
@@ -44,6 +45,7 @@ contract GaugeVotePlatform{
         require(block.timestamp >= proposals[_proposalId].startTime, "Voting not started");
         require(block.timestamp <= proposals[_proposalId].endTime, "Voting ended");
         require(_gauges.length == _weights.length, "Array length mismatch");
+        require(userInfo[_proposalId][msg.sender].baseWeight > 0, "!proof");
 
         //update user weights
         delete votes[_proposalId][msg.sender].gauges;
@@ -68,17 +70,12 @@ contract GaugeVotePlatform{
         emit UserWeightChange(_proposalId, msg.sender, _baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
 
 
+        //todo: get delegate as part of merkle data as the on chain delegation could differ
         address delegate = delegation.getDelegate(msg.sender);
         if(delegate != msg.sender) {
             userInfo[_proposalId][delegate].adjustedWeight -= int256(_baseWeight);
             emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
         }
-    }
-
-
-    function setDelegationContract(address _delegation) public onlyOwner {
-        delegation = IDelegation(_delegation);
-        emit DelegationChange(_delegation);
     }
 
     function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime) public onlyOperator {
@@ -88,6 +85,15 @@ contract GaugeVotePlatform{
             endTime: _endTime
         }));
         emit NewProposal(proposals.length-1, _baseWeightMerkleRoot, _startTime, _endTime);
+    }
+
+
+    function updateUserWeight(uint256 _proposalId, address _user, uint256 _newWeight) external onlyUserManager{
+        require(userInfo[_proposalId][_user].baseWeight > 0, "!proof");
+
+        userInfo[_proposalId][_user].baseWeight = _newWeight;
+
+        emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
     }
 
     function transferOwnership(address _owner) external onlyOwner{
@@ -107,6 +113,16 @@ contract GaugeVotePlatform{
         emit OperatorSet(_op, _active);
     }
 
+    function setDelegation(address _delegation) public onlyOwner {
+        delegation = IDelegation(_delegation);
+        emit DelegationChange(_delegation);
+    }
+
+    function setUserManager(address _userManager) public onlyOwner {
+        userManager = _userManager;
+        emit UserManagerChange(_userManager);
+    }
+
     modifier onlyOwner() {
         require(owner == msg.sender, "!owner");
         _;
@@ -117,14 +133,20 @@ contract GaugeVotePlatform{
         _;
     }
 
+    modifier onlyUserManager() {
+        require(userManager == msg.sender, "!userManager");
+        _;
+    }
+
 
     event VoteCast(uint256 indexed proposalId, address indexed user, address[] gauges, uint256[] weights);
     event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
     event UserWeightChange(uint256 indexed pid, address indexed user, uint256 baseWeight, int256 adjustedWeight);
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
-    event OperatorSet(address indexed _op, bool _active);
-    event DelegationChange(address delgationContract);
+    event OperatorSet(address indexed op, bool active);
+    event DelegationChange(address delgation);
+    event UserManagerChange(address userManager);
 
     constructor(address delegationContract) {
         owner = msg.sender;

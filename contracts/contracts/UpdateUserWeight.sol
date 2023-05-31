@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
+import "./interfaces/IVotePlatform.sol";
 
 contract UpdateUserWeight {
 
@@ -8,14 +9,17 @@ contract UpdateUserWeight {
     address public pendingowner;
     address public operator;
 
+    address public immutable votePlatform;
+
     uint256 public constant epochDuration = 86400 * 7;
 
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address _op);
 
-    constructor() {
+    constructor(address _votePlatform) {
         owner = msg.sender;
+        votePlatform = _votePlatform;
     }
 
     function currentEpoch() public view returns (uint256) {
@@ -48,6 +52,7 @@ contract UpdateUserWeight {
         require(msg.sender == operator, "!op");
         require(_epoch == currentEpoch(), "!epoch");
 
-        //todo: send to voter system to handle
+        //update voting platform's user weight for the specified proposal id
+        IVotePlatform(votePlatform).updateUserWeight(_proposalId, _user, _weight);
     }
 }
