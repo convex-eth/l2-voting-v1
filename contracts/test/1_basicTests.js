@@ -2,6 +2,7 @@
 const { BN, time } = require('openzeppelin-test-helpers');
 var jsonfile = require('jsonfile');
 const { assert } = require('chai');
+const merkle = require('../../scripts/merkle');
 var contractList = jsonfile.readFileSync('./contracts.json');
 
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
@@ -148,6 +149,7 @@ contract("Deploy System and test", async accounts => {
     let userB = accounts[1];
     let userC = accounts[2];
     let userD = accounts[3];
+    let userX = "0xAdE9e51C9E23d64E538A7A38656B78aB6Bcc349e";
     let userZ = "0xAAc0aa431c237C2C0B5f041c8e59B3f1a43aC78F";
     var userNames = {};
     userNames[userA] = "A";
@@ -155,6 +157,19 @@ contract("Deploy System and test", async accounts => {
     userNames[userC] = "C";
     userNames[userD] = "D";
     userNames[userZ] = "Z";
+
+    // merkle data
+    var userData = {};
+    var userDelegation = {};
+    userData[userA] = 100;
+    userData[userX] = 200;
+    userData[userZ] = 300;
+    userDelegation[userA] = userX;
+    userDelegation[userX] = userX;
+    userDelegation[userZ] = userZ;
+
+    tree = await merkle.createTree(userData, userDelegation);
+    console.log(JSON.stringify(tree, null, 2));
 
     let chainContracts = getChainContracts();
    
@@ -164,19 +179,16 @@ contract("Deploy System and test", async accounts => {
     var delegation = await Delegation.new();
     console.log("delegation: " +delegation.address)
 
-    var gaugeVotePlatform = await GaugeVotePlatform.new(delegation.address);
+    var gaugeVotePlatform = await GaugeVotePlatform.new(delegation.address, {from:userA});
     console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
 
     console.log("\n\n --- deployed ----")
 
     // test delegation
-    await delegation.setDelegate(userB, {from:userA});
+    console.log("delegate userA to userX")
+    await delegation.setDelegate(userX, {from:userA});
     cdelegate = await delegation.registry(userA, {from:userA});
-    console.log("UserA delegate registery:");
-    console.log("to :"+cdelegate.to);
-    console.log("start :"+cdelegate.start.toNumber());
-    console.log("expire :"+cdelegate.expiration.toNumber());
-    assert.equal(cdelegate.to, userB, "delegate to userB");
+    assert.equal(cdelegate.to, userX, "delegate to userX");
 
     cdelegate = await delegation.getDelegate(userA, {from:userA});
     console.log("UserA delegate current:"+cdelegate);
@@ -185,8 +197,32 @@ contract("Deploy System and test", async accounts => {
     await advanceTime(7*day);
     cdelegate = await delegation.getDelegate(userA, {from:userA});
     console.log("UserA delegate next epoch:"+cdelegate);
-    assert.equal(cdelegate, userB, "delegation next epoch");
+    assert.equal(cdelegate, userX, "delegation next epoch");
 
+
+    console.log("Create proposal");
+    var _baseWeightMerkleRoot = tree.root;
+    var _startTime = await currentTime();
+    var _endTime = _startTime + 4*day;
+    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime, {from:userA});
+    
+    proposal = await gaugeVotePlatform.proposals(0, {from:userA});
+
+    console.log("Vote with proofs");
+    //    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
+    var _proposalId = 0;
+    var _gauges = [userX, userZ];
+    var _weights = [4000, 6000];
+    var _proofs = tree.users[userA].proof;
+    var _baseWeight = 100;
+    var _delegate = userX;
+
+  
+    await gaugeVotePlatform.voteWithProofs(_proposalId, _gauges, _weights, _proofs, _baseWeight, _delegate, {from:userA});
+
+    vote = await gaugeVotePlatform.getVote(0, userA, {from:userA});
+    console.log(vote);
+    
 
 
     return;

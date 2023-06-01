@@ -57,24 +57,21 @@ contract GaugeVotePlatform{
         emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
     }
 
-    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, uint256 index, bytes32[] calldata proofs, uint256 _baseWeight) public {
-        _supplyProofs(_proposalId, index, proofs, _baseWeight);
+    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
+        _supplyProofs(_proposalId, proofs, _baseWeight, _delegate);
         vote(_proposalId, _gauges, _weights);
     }
 
-    function _supplyProofs(uint256 _proposalId, uint256 index, bytes32[] calldata proofs, uint256 _baseWeight) internal {
+    function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) internal {
         require(userInfo[_proposalId][msg.sender].baseWeight == 0, "Proofs already supplied");
-        bytes32 node = keccak256(abi.encodePacked(index, msg.sender, _baseWeight));
+        bytes32 node = keccak256(abi.encodePacked(msg.sender, _delegate, _baseWeight));
         require(MerkleProof.verify(proofs, proposals[_proposalId].baseWeightMerkleRoot, node), 'Invalid proof.');
         userInfo[_proposalId][msg.sender].baseWeight = _baseWeight;
         emit UserWeightChange(_proposalId, msg.sender, _baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
 
-
-        //todo: get delegate as part of merkle data as the on chain delegation could differ
-        address delegate = delegation.getDelegate(msg.sender);
-        if(delegate != msg.sender) {
-            userInfo[_proposalId][delegate].adjustedWeight -= int256(_baseWeight);
-            emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
+        if(_delegate != msg.sender) {
+            userInfo[_proposalId][_delegate].adjustedWeight -= int256(_baseWeight);
+            emit UserWeightChange(_proposalId, _delegate,  userInfo[_proposalId][_delegate].baseWeight,  userInfo[_proposalId][_delegate].adjustedWeight);
         }
     }
 
