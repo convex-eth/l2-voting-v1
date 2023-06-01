@@ -22,6 +22,7 @@ contract GaugeVotePlatform{
         int256 adjustedWeight; //signed weight change via delegation change or updated user weight
     }
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
+    mapping(uint256 => address[]) public votedUsers; // proposalId => votedUsers[]
 
     struct Proposal {
         bytes32 baseWeightMerkleRoot; //merkle root to provide user base weights 
@@ -36,6 +37,14 @@ contract GaugeVotePlatform{
 
     Proposal[] public proposals;
     mapping(uint256 => mapping(address => Vote)) internal votes; // proposalId => user => Vote
+
+    function getVoterCount(uint256 _proposalId) external view returns(uint256){
+        return votedUsers[_proposalId].length;
+    }
+
+    function getVoterAtIndex(uint256 _proposalId, uint256 _index) external view returns(address){
+        return votedUsers[_proposalId][_index];
+    }
 
     function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory, uint256, int256) {
         return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, userInfo[_proposalId][_user].baseWeight, userInfo[_proposalId][_user].adjustedWeight);
@@ -60,6 +69,7 @@ contract GaugeVotePlatform{
     function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
         _supplyProofs(_proposalId, proofs, _baseWeight, _delegate);
         vote(_proposalId, _gauges, _weights);
+        votedUsers[_proposalId].push(msg.sender);
     }
 
     function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) internal {
