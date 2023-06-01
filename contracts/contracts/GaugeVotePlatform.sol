@@ -46,8 +46,8 @@ contract GaugeVotePlatform{
         return votedUsers[_proposalId][_index];
     }
 
-    function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory, uint256, int256) {
-        return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, userInfo[_proposalId][_user].baseWeight, userInfo[_proposalId][_user].adjustedWeight);
+    function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory, int256) {
+        return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight);
     }
 
     function vote(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights) public {
