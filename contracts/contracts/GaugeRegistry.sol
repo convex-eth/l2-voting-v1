@@ -43,7 +43,7 @@ contract GaugeRegistry {
     }
 
     modifier onlyOperator() {
-        require(operator == msg.sender, "!op");
+        require(operator == msg.sender || owner == msg.sender, "!op");
         _;
     }
 
