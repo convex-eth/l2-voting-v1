@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-import "./interfaces/IDelegation.sol";
+// import "./interfaces/IDelegation.sol";
+import "./interfaces/IGaugeRegistry.sol";
 import "../node_modules/@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 
@@ -14,8 +15,9 @@ contract GaugeVotePlatform{
     address public pendingowner;
     mapping(address => bool) public operators;
 
-    IDelegation public delegation;
-    address public userManager;
+    // IDelegation public delegation;
+    address public immutable gaugeRegistry;
+    address public userManager; //todo: can probably just be immutable?
 
     struct UserInfo {
         uint256 baseWeight; //original weight
@@ -37,6 +39,7 @@ contract GaugeVotePlatform{
 
     Proposal[] public proposals;
     mapping(uint256 => mapping(address => Vote)) internal votes; // proposalId => user => Vote
+    uint256 public constant max_weight = 10000;
 
     function getVoterCount(uint256 _proposalId) external view returns(uint256){
         return votedUsers[_proposalId].length;
@@ -51,18 +54,23 @@ contract GaugeVotePlatform{
     }
 
     function vote(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights) public {
-        require(block.timestamp >= proposals[_proposalId].startTime, "Voting not started");
-        require(block.timestamp <= proposals[_proposalId].endTime, "Voting ended");
-        require(_gauges.length == _weights.length, "Array length mismatch");
+        require(block.timestamp >= proposals[_proposalId].startTime, "!start");
+        require(block.timestamp <= proposals[_proposalId].endTime, "!end");
+        require(_gauges.length == _weights.length, "mismatch");
         require(userInfo[_proposalId][msg.sender].baseWeight > 0, "!proof");
 
         //update user weights
         delete votes[_proposalId][msg.sender].gauges;
         delete votes[_proposalId][msg.sender].weights;
+        uint256 totalweight;
         for(uint256 i = 0; i < _weights.length; i++) {
+            require(_weights[i] > 0, "!weight");
+            require(IGaugeRegistry(gaugeRegistry).isGauge(_gauges[i]),"!gauge");
             votes[_proposalId][msg.sender].gauges.push(_gauges[i]);
             votes[_proposalId][msg.sender].weights.push(_weights[i]);
+            totalweight += _weights[i];
         }
+        require(totalweight <= max_weight, "max weight");
         emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
     }
 
@@ -120,10 +128,10 @@ contract GaugeVotePlatform{
         emit OperatorSet(_op, _active);
     }
 
-    function setDelegation(address _delegation) public onlyOwner {
-        delegation = IDelegation(_delegation);
-        emit DelegationChange(_delegation);
-    }
+    // function setDelegation(address _delegation) public onlyOwner {
+    //     delegation = IDelegation(_delegation);
+    //     emit DelegationChange(_delegation);
+    // }
 
     function setUserManager(address _userManager) public onlyOwner {
         userManager = _userManager;
@@ -152,14 +160,15 @@ contract GaugeVotePlatform{
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address indexed op, bool active);
-    event DelegationChange(address delgation);
+    // event DelegationChange(address delgation);
     event UserManagerChange(address userManager);
 
-    constructor(address delegationContract) {
+    constructor(address _guageRegistry) {
         owner = msg.sender;
         operators[msg.sender] = true;
-        delegation = IDelegation(delegationContract);
-        emit DelegationChange(delegationContract);
+        gaugeRegistry = _guageRegistry;
+        // delegation = IDelegation(delegationContract);
+        // emit DelegationChange(delegationContract);
     }
 
 }

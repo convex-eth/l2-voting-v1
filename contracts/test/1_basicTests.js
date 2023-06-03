@@ -7,6 +7,7 @@ var contractList = jsonfile.readFileSync('./contracts.json');
 
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
 const Delegation = artifacts.require("Delegation");
+const GaugeRegistry = artifacts.require("GaugeRegistry");
 
 // const IERC20 = artifacts.require("IERC20");
 // const ERC20 = artifacts.require("ERC20");
@@ -179,7 +180,11 @@ contract("Deploy System and test", async accounts => {
     var delegation = await Delegation.new();
     console.log("delegation: " +delegation.address)
 
-    var gaugeVotePlatform = await GaugeVotePlatform.new(delegation.address, {from:userA});
+    var gaugeReg = await GaugeRegistry.new();
+    console.log("gaugeReg: " +gaugeReg.address);
+    await gaugeReg.setOperator(userA,{from:userA});
+
+    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, {from:userA});
     console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
 
     console.log("\n\n --- deployed ----")
@@ -200,7 +205,11 @@ contract("Deploy System and test", async accounts => {
     assert.equal(cdelegate, userX, "delegation next epoch");
 
 
+
     console.log("Create proposal");
+    //fill some fake gauges
+    await gaugeReg.setGauge(userX,{from:userA});
+    await gaugeReg.setGauge(userZ,{from:userA});
     var _baseWeightMerkleRoot = tree.root;
     var _startTime = await currentTime();
     var _endTime = _startTime + 4*day;
