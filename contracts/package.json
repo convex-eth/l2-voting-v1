@@ -22,6 +22,9 @@
     "zksync-web3": "^0.14.3"
   },
   "devDependencies": {
-    "truffle-plugin-verify": "^0.6.3"
+    "@matterlabs/hardhat-zksync-toolbox": "^0.1.1",
+    "truffle-plugin-verify": "^0.6.3",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.3"
   }
 }

@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 // import "./interfaces/IDelegation.sol";
 import "./interfaces/IGaugeRegistry.sol";
-import "../node_modules/@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 
 /*
