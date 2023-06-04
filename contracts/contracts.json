@@ -3,7 +3,7 @@
         "system": {
             "deployer": "0x748765B8C7d0d40DC6B908c5A95f37605f037a15",
             "multisig": "0x6111ABF720051309012FcdBc2910054E41dcFF8c",
-            "gaugeRegistry": ""
+            "gaugeRegistry": "0x08ab1B475a3d616c3c38b0e9DE990e000468665d"
         }
     }
 }

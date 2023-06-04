@@ -2,6 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 
 import "@matterlabs/hardhat-zksync-deploy";
 import "@matterlabs/hardhat-zksync-solc";
+import "@matterlabs/hardhat-zksync-verify";
 var jsonfile = require('jsonfile');
 var api_keys = jsonfile.readFileSync('./.api_keys');
 
@@ -11,7 +12,7 @@ const config: HardhatUserConfig = {
     compilerSource: "binary",
     settings: {},
   },
-  defaultNetwork: "zkSync",
+  defaultNetwork: "zksync",
   networks: {
     hardhat: {
       zksync: false,
@@ -24,16 +25,20 @@ const config: HardhatUserConfig = {
       url: api_keys.provider_mainnet,
       zksync: false,
     },
-    zkSync: {
+    zksync: {
       url: api_keys.provider_zksync,
       ethNetwork: "mainnet",
       zksync: true,
+      verifyURL: 'https://zksync2-mainnet-explorer.zksync.io/contract_verification'
     },
   },
   solidity: {
     version: "0.8.10",
   },
   // OTHER SETTINGS...
+  etherscan: {
+    apiKey: api_keys.etherscan,
+  }
 };
 
 export default config;
