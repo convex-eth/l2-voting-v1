@@ -159,9 +159,11 @@ contract("Deploy System and test", async accounts => {
 
     var gaugeReg = await GaugeRegistry.at(chainContracts.system.gaugeRegistry);
     console.log("gaugeReg: " +gaugeReg.address);
+    console.log(gaugeReg);
 
-    await gaugeReg.owner().then(a=>console.log("owner: " +a))
-    await gaugeReg.operator().then(a=>console.log("operator: " +a))
+    var owner = await gaugeReg.owner();
+    // await gaugeReg.owner().then(a=>console.log("owner: " +a))
+    // await gaugeReg.operator().then(a=>console.log("operator: " +a))
 
     return;
   });
