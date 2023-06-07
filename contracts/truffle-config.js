@@ -66,6 +66,17 @@ module.exports = {
       // gasLimit: 6721975,
       gasPrice: 200000000000
     },
+    mainnetZkevm: {
+      provider: () => new HDWalletProvider(api_keys.mnemonic, api_keys.provider_zkevm),
+      network_id: 1101,
+      // gasLimit: 6721975,
+      gasPrice: 200000000000,
+      verify: {
+        apiUrl: 'https://api-zkevm.polygonscan.com/api',
+        apiKey: api_keys.zkevm_polyscan,
+        explorerUrl: 'https://zkevm.polygonscan.com/address',
+      }
+    },
     mainnetOp: {
       provider: () => new HDWalletProvider(api_keys.mnemonic, api_keys.provider_optimism),
       network_id: 1, 
@@ -83,6 +94,13 @@ module.exports = {
       host: "127.0.0.1",
       port: 8545,
       network_id: "324",
+      gas: 6721975,
+      gasPrice: 500000000
+    },
+    debugZkevm: {
+      host: "127.0.0.1",
+      port: 8545,
+      network_id: "1101",
       gas: 6721975,
       gasPrice: 500000000
     },

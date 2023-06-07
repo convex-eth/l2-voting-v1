@@ -8,6 +8,7 @@ contract UpdateUserWeight {
     address public owner;
     address public pendingowner;
     address public operator;
+    address private caller;
 
     address public immutable votePlatform;
 
@@ -48,8 +49,19 @@ contract UpdateUserWeight {
         _;
     }
 
+    function onMessageReceived(address originAddress, uint32 originNetwork, bytes memory data) external payable {
+        require(operator == originAddress, "!op");
+        require(originNetwork == 0);
+        caller = originAddress;
+        (bool success, ) = address(this).call(data);
+        if (!success) {
+            revert('metadata execution failed');
+        }
+        caller = address(0);
+    }
+
     function updateWeight(address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) external {
-        require(msg.sender == operator, "!op");
+        require( (caller != address(0) && caller == operator) || owner == msg.sender, "!op");
         require(_epoch == currentEpoch(), "!epoch");
 
         //update voting platform's user weight for the specified proposal id

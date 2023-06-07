@@ -8,6 +8,7 @@ contract GaugeRegistry {
     address public owner;
     address public pendingowner;
     address public operator;
+    address private caller;
 
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
@@ -42,12 +43,19 @@ contract GaugeRegistry {
         _;
     }
 
-    modifier onlyOperator() {
-        require(operator == msg.sender || owner == msg.sender, "!op");
-        _;
+    function onMessageReceived(address originAddress, uint32 originNetwork, bytes memory data) external payable {
+        require(operator == originAddress, "!op");
+        require(originNetwork == 0);
+        caller = originAddress;
+        (bool success, ) = address(this).call(data);
+        if (!success) {
+            revert('metadata execution failed');
+        }
+        caller = address(0);
     }
 
-    function setGauge(address _gauge, bool _isActive) external onlyOperator{
+    function setGauge(address _gauge, bool _isActive) external{
+        require( (caller != address(0) && caller == operator) || owner == msg.sender, "!op");
         activeGauges[_gauge] = _isActive;
         emit SetGauge(_gauge, _isActive);
     }
