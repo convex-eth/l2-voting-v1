@@ -46,7 +46,7 @@ module.exports = {
       provider: () => new HDWalletProvider(api_keys.mnemonic, api_keys.provider_mainnet),
       network_id: 1, 
       gas: 6721975,
-      gasPrice: 20000000000
+      gasPrice: 25000000000
     },
     mainnetArb: {
       provider: () => new HDWalletProvider(api_keys.mnemonic, api_keys.provider_arbitrum),
@@ -70,7 +70,7 @@ module.exports = {
       provider: () => new HDWalletProvider(api_keys.mnemonic, api_keys.provider_zkevm),
       network_id: 1101,
       // gasLimit: 6721975,
-      gasPrice: 200000000000,
+      gasPrice: 2000000000,
       verify: {
         apiUrl: 'https://api-zkevm.polygonscan.com/api',
         apiKey: api_keys.zkevm_polyscan,

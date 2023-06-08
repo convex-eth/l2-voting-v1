@@ -1,9 +1,16 @@
 {
-    "zksync": {
+    "mainnet": {
+        "system": {
+            "deployer": "0x748765B8C7d0d40DC6B908c5A95f37605f037a15",
+            "multisig": "0xa3C5A1e09150B75ff251c1a7815A07182c3de2FB",
+            "gaugeCommit": "0x33d04dC091D5fD77b99083a0430A3CD7351C8401"
+        }
+    },
+    "zkevm": {
         "system": {
             "deployer": "0x748765B8C7d0d40DC6B908c5A95f37605f037a15",
             "multisig": "0x6111ABF720051309012FcdBc2910054E41dcFF8c",
-            "gaugeRegistry": "0x08ab1B475a3d616c3c38b0e9DE990e000468665d"
+            "gaugeRegistry": "0xfe8c5641Fb7B816E29F85aCAEC168264979fF8bC"
         }
     }
 }

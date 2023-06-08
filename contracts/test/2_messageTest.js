@@ -7,6 +7,7 @@ var contractList = jsonfile.readFileSync('./contracts.json');
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
 const Delegation = artifacts.require("Delegation");
 const GaugeRegistry = artifacts.require("GaugeRegistry");
+const CommitGaugeStatus = artifacts.require("CommitGaugeStatus");
 
 // const IERC20 = artifacts.require("IERC20");
 // const ERC20 = artifacts.require("ERC20");
@@ -105,8 +106,10 @@ const getChainContracts = () => {
   console.log("network: " +NETWORK);
   var contracts = {};
 
-  if(NETWORK == "debugZksync" || NETWORK == "mainnetZksync"){
-    contracts = contractList.zksync;
+  if(NETWORK == "debugZkevm" || NETWORK == "mainnetZkevm"){
+    contracts = contractList.zkevm;
+  }else if(NETWORK == "debug" || NETWORK == "mainnet"){
+    contracts = contractList.mainnet;
   }
 
   return contracts;
@@ -157,13 +160,32 @@ contract("Deploy System and test", async accounts => {
 
     console.log("\n\n >>>> Begin Tests >>>>")
 
-    var gaugeReg = await GaugeRegistry.at(chainContracts.system.gaugeRegistry);
-    console.log("gaugeReg: " +gaugeReg.address);
-    console.log(gaugeReg);
+    // var gaugecommit = await CommitGaugeStatus.new();
+    var gaugecommit = await CommitGaugeStatus.at(chainContracts.system.gaugeCommit);
+    console.log("gaugecommit at: " +gaugecommit.address);
+    // return;
+    var gauge = "0xfb18127c1471131468a1aad4785c19678e521d86";
+    var reg = contractList.zkevm.system.gaugeRegistry;
+    console.log("sending message to " +reg);
+    await gaugecommit.commit(gauge, reg,{from:deployer});
+    console.log("commit called");
 
-    var owner = await gaugeReg.owner();
+    // return;
+
+    // var gaugeReg = await GaugeRegistry.new({from:deployer});
+    // // var gaugeReg = await GaugeRegistry.at(reg);
+    // console.log("gaugeReg: " +gaugeReg.address);
     // await gaugeReg.owner().then(a=>console.log("owner: " +a))
     // await gaugeReg.operator().then(a=>console.log("operator: " +a))
+    // await gaugeReg.setOperator(contractList.mainnet.system.gaugeCommit,{from:deployer});
+    // await gaugeReg.operator().then(a=>console.log("operator: " +a))
+
+    // var bridge = "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe";
+    // await unlockAccount(bridge);
+    // var testcalldata = "0x4f0d36a4000000000000000000000000fb18127c1471131468a1aad4785c19678e521d860000000000000000000000000000000000000000000000000000000000000001";
+    // var tx = await gaugeReg.onMessageReceived(contractList.mainnet.system.gaugeCommit,0,testcalldata,{from:bridge,gasPrice:0});
+    // console.log(tx.logs[0].args);
+    // await gaugeReg.setGauge(gauge,true).catch(a=>console.log("catch: " +a));
 
     return;
   });

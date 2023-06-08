@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
+import "./interfaces/IBridgeMessageReceiver.sol";
 import "./interfaces/IVotePlatform.sol";
 
-contract UpdateUserWeight {
+contract UpdateUserWeight is IBridgeMessageReceiver {
 
     address public owner;
     address public pendingowner;
     address public operator;
-    address private caller;
+    address public bridge;
 
     address public immutable votePlatform;
 
@@ -17,10 +18,12 @@ contract UpdateUserWeight {
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address _op);
+    event BridgeSet(address _bridge);
 
     constructor(address _votePlatform) {
         owner = msg.sender;
         votePlatform = _votePlatform;
+        bridge = address(0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe);
     }
 
     function currentEpoch() public view returns (uint256) {
@@ -44,24 +47,28 @@ contract UpdateUserWeight {
         emit OperatorSet(_op);
     }
 
+    function setBridge(address _bridge) external onlyOwner{
+        bridge = _bridge;
+        emit BridgeSet(_bridge);
+    }
+
     modifier onlyOwner() {
         require(owner == msg.sender, "!owner");
         _;
     }
 
     function onMessageReceived(address originAddress, uint32 originNetwork, bytes memory data) external payable {
-        require(operator == originAddress, "!op");
-        require(originNetwork == 0);
-        caller = originAddress;
+        require(msg.sender == bridge, "!bridge");
+        require(operator == originAddress && originNetwork == 0, "!op");
+
         (bool success, ) = address(this).call(data);
         if (!success) {
             revert('metadata execution failed');
         }
-        caller = address(0);
     }
 
-    function updateWeight(address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) external {
-        require( (caller != address(0) && caller == operator) || owner == msg.sender, "!op");
+    function updateWeight(address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) public {
+        require(msg.sender == address(this),"!self");
         require(_epoch == currentEpoch(), "!epoch");
 
         //update voting platform's user weight for the specified proposal id

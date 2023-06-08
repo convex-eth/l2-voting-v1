@@ -20,7 +20,7 @@ contract CommitGaugeStatus {
         require(IGaugeController(gaugeController).get_gauge_weight(_gauge) > 0, "must have weight");
 
         //check killed for status
-        bool active = ICurveGauge(_gauge).is_killed();
+        bool active = !ICurveGauge(_gauge).is_killed();
 
         //build data
         bytes memory data = abi.encodeWithSelector(updateSelector, _gauge, active);
