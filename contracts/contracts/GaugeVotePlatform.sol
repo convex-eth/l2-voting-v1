@@ -15,7 +15,7 @@ contract GaugeVotePlatform{
     mapping(address => bool) public operators;
 
     address public immutable gaugeRegistry;
-    address public userManager; //todo: can probably just be immutable?
+    address public immutable userManager;
 
     struct UserInfo {
         uint256 baseWeight; //original weight
@@ -84,18 +84,19 @@ contract GaugeVotePlatform{
         emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
     }
 
-    function voteWithProofs(address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
+    function voteWithProofs(address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) public {
         uint256 _proposalId = proposals.length - 1;
-        _supplyProofs(_proposalId, proofs, _baseWeight, _delegate);
+        _supplyProofs(_proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
         vote(_gauges, _weights);
         votedUsers[_proposalId].push(msg.sender);
     }
 
-    function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) internal {
+    function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) internal {
         require(userInfo[_proposalId][msg.sender].baseWeight == 0, "Proofs already supplied");
-        bytes32 node = keccak256(abi.encodePacked(msg.sender, _delegate, _baseWeight));
+        bytes32 node = keccak256(abi.encodePacked(msg.sender, _delegate, _baseWeight, _adjustedWeight));
         require(MerkleProof.verify(proofs, proposals[_proposalId].baseWeightMerkleRoot, node), 'Invalid proof.');
         userInfo[_proposalId][msg.sender].baseWeight = _baseWeight;
+        userInfo[_proposalId][msg.sender].adjustedWeight = _adjustedWeight;
         emit UserWeightChange(_proposalId, msg.sender, _baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
 
         if(_delegate != msg.sender) {
@@ -149,10 +150,6 @@ contract GaugeVotePlatform{
         emit EqualizerAccountSet(_eq, _active);
     }
 
-    function setUserManager(address _userManager) public onlyOwner {
-        userManager = _userManager;
-        emit UserManagerChange(_userManager);
-    }
 
     modifier onlyOwner() {
         require(owner == msg.sender, "!owner");
@@ -177,12 +174,12 @@ contract GaugeVotePlatform{
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address indexed op, bool active);
     event EqualizerAccountSet(address indexed eq, bool active);
-    event UserManagerChange(address userManager);
 
-    constructor(address _guageRegistry) {
+    constructor(address _guageRegistry, address _userManager) {
         owner = msg.sender;
         operators[msg.sender] = true;
         gaugeRegistry = _guageRegistry;
+        userManager = _userManager;
     }
 
 }

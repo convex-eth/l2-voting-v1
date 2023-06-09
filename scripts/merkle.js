@@ -9,12 +9,12 @@ function bufToHex(buffer) { // buffer is an ArrayBuffer
 }
 
 module.exports = {
-	createTree: async function (userData, userDelegation) {
+	createTree: async function (userBase, userAdjusted, userDelegation) {
         var elements = [];
-        userlist = Object.keys(userData);
-        for(user in userData){
-            // abi encode packed user, delegate, amount
-            elements.push(ethers.utils.solidityKeccak256(["address","address","uint256"],[user,userDelegation[user],userData[user]]));
+        userlist = Object.keys(userBase);
+        for(user in userBase){
+            // abi encode packed user, delegate, base amount, adjustment
+            elements.push(ethers.utils.solidityKeccak256(["address","address","uint256","int256"],[user,userDelegation[user],userBase[user],userAdjusted[user]]));
         }
 
         const merkleTree = new MerkleTree(elements, keccak256, { sortPairs: true })
@@ -26,7 +26,8 @@ module.exports = {
             var proofHex = proofbytes.map(e => "0x"+e.data.toString('hex'));
             var address = userlist[i];
             var delegate = userDelegation[userlist[i]];
-            var amount = userData[userlist[i]];
+            var baseamount = userBase[userlist[i]];
+            var adjustedamount = userAdjusted[userlist[i]];
 
             if(!merkleTree.verify(proofbytes,elements[i],root)) {
                 console.error("proof verification failed at index " + i);
@@ -39,7 +40,8 @@ module.exports = {
             compiledProofs.users[address] = {};
             compiledProofs.users[address]["leaf"] = elements[i].toString('hex');
             compiledProofs.users[address]["proof"] = proofHex;
-            compiledProofs.users[address]["amount"] = amount;
+            compiledProofs.users[address]["base_amount"] = baseamount;
+            compiledProofs.users[address]["adjusted_amount"] = adjustedamount;
             compiledProofs.users[address]["delegate"] = delegate;
 
         }

@@ -8,6 +8,7 @@ var contractList = jsonfile.readFileSync('./contracts.json');
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
 const Delegation = artifacts.require("Delegation");
 const GaugeRegistry = artifacts.require("GaugeRegistry");
+const UpdateUserWeight = artifacts.require("UpdateUserWeight");
 
 // const IERC20 = artifacts.require("IERC20");
 // const ERC20 = artifacts.require("ERC20");
@@ -125,8 +126,10 @@ const getChainContracts = () => {
   console.log("network: " +NETWORK);
   var contracts = {};
 
-  if(NETWORK == "debugZksync" || NETWORK == "mainnetZksync"){
-    contracts = contractList.zksync;
+  if(NETWORK == "debugZkevm" || NETWORK == "mainnetZkevm"){
+    contracts = contractList.zkevm;
+  }else if(NETWORK == "debug" || NETWORK == "mainnet"){
+    contracts = contractList.mainnet;
   }
 
   return contracts;
@@ -159,16 +162,20 @@ contract("Deploy System and test", async accounts => {
     userNames[userZ] = "Z";
 
     // merkle data
-    var userData = {};
+    var userBase = {};
+    var userAdjusted = {};
     var userDelegation = {};
-    userData[userA] = 100;
-    userData[userX] = 200;
-    userData[userZ] = 300;
+    userBase[userA] = 100;
+    userBase[userX] = 200;
+    userBase[userZ] = 300;
+    userAdjusted[userA] = 0;
+    userAdjusted[userX] = userBase[userA];
+    userAdjusted[userZ] = 0;
     userDelegation[userA] = userX;
     userDelegation[userX] = userX;
     userDelegation[userZ] = userZ;
 
-    tree = await merkle.createTree(userData, userDelegation);
+    tree = await merkle.createTree(userBase, userAdjusted, userDelegation);
     console.log(JSON.stringify(tree, null, 2));
 
     let chainContracts = getChainContracts();
@@ -181,14 +188,18 @@ contract("Deploy System and test", async accounts => {
     console.log("\n\n >>>> Begin Tests >>>>")
 
     //system
-    var delegation = await Delegation.new();
+    var delegation = await Delegation.new({from:deployer});
     console.log("delegation: " +delegation.address)
 
-    var gaugeReg = await GaugeRegistry.new();
+    var gaugeReg = await GaugeRegistry.new({from:deployer});
     console.log("gaugeReg: " +gaugeReg.address);
-    await gaugeReg.setOperator(userA,{from:userA});
+    await gaugeReg.setOperator(contractList.mainnet.system.gaugeCommit,{from:deployer});
+    console.log("set operator on gauge reg");
 
-    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, {from:userA});
+    var userManager = await UpdateUserWeight.new({from:deployer})
+    console.log("user manager: " +userManager.address);
+
+    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, userManager.address, {from:deployer});
     console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
 
     console.log("\n\n --- deployed ----")
@@ -212,29 +223,33 @@ contract("Deploy System and test", async accounts => {
 
     console.log("Create proposal");
     //fill some fake gauges
-    await gaugeReg.setGauge(userX,{from:userA});
-    await gaugeReg.setGauge(userZ,{from:userA});
+    var gaugeA = "0xfb18127c1471131468a1aad4785c19678e521d86";
+    var gaugeB = "0x2932a86df44fe8d2a706d8e9c5d51c24883423f5";
+    await gaugeReg.setGauge(gaugeA,true,{from:deployer});
+    await gaugeReg.setGauge(gaugeB,true,{from:deployer});
     var _baseWeightMerkleRoot = tree.root;
     var _startTime = await currentTime();
     var _endTime = _startTime + 4*day;
-    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime, {from:userA});
+    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime, {from:deployer});
     
-    proposal = await gaugeVotePlatform.proposals(0, {from:userA});
+    var proposal = await gaugeVotePlatform.proposals(0);
+    console.log(proposal);
 
     console.log("Vote with proofs");
     //    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
     var _proposalId = 0;
-    var _gauges = [userX, userZ];
+    var _gauges = [gaugeA, gaugeB];
     var _weights = [4000, 6000];
     var _proofs = tree.users[userA].proof;
-    var _baseWeight = 100;
+    var _baseWeight = userBase[userA];
+    var _adjustedWeight = userAdjusted[userA];
     var _delegate = userX;
 
   
-    await gaugeVotePlatform.voteWithProofs(_proposalId, _gauges, _weights, _proofs, _baseWeight, _delegate, {from:userA});
+    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, _proofs, _baseWeight, _adjustedWeight, _delegate, {from:userA});
 
-    vote = await gaugeVotePlatform.getVote(0, userA, {from:userA});
-    console.log(vote);
+    var vote = await gaugeVotePlatform.getVote(0, userA, {from:userA});
+    console.log(JSON.stringify(vote));
     
 
 

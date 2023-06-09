@@ -11,8 +11,6 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
     address public operator;
     address public bridge;
 
-    address public immutable votePlatform;
-
     uint256 public constant epochDuration = 86400 * 7;
 
     event TransferOwnership(address pendingOwner);
@@ -20,9 +18,8 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
     event OperatorSet(address _op);
     event BridgeSet(address _bridge);
 
-    constructor(address _votePlatform) {
+    constructor() {
         owner = msg.sender;
-        votePlatform = _votePlatform;
         bridge = address(0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe);
     }
 
@@ -67,11 +64,11 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
         }
     }
 
-    function updateWeight(address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) public {
+    function updateWeight(address _voteplatform, address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) public {
         require(msg.sender == address(this),"!self");
         require(_epoch == currentEpoch(), "!epoch");
 
         //update voting platform's user weight for the specified proposal id
-        IVotePlatform(votePlatform).updateUserWeight(_proposalId, _user, _weight);
+        IVotePlatform(_voteplatform).updateUserWeight(_proposalId, _user, _weight);
     }
 }
