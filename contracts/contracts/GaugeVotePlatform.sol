@@ -20,6 +20,8 @@ contract GaugeVotePlatform{
     struct UserInfo {
         uint256 baseWeight; //original weight
         int256 adjustedWeight; //signed weight change via delegation change or updated user weight
+        uint256 pendingWeight; //weight updated but awaiting proof
+        address delegate;
         bool voted;
     }
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
@@ -55,12 +57,12 @@ contract GaugeVotePlatform{
         return votedUsers[_proposalId][_index];
     }
 
-    function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory, bool, int256) {
-        int256 voteWeight;
-        if(userInfo[_proposalId][_user].voted){
-            voteWeight = int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight;
-        }
-        return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, userInfo[_proposalId][_user].voted, voteWeight);
+    function getVote(uint256 _proposalId, address _user) public view returns (address[] memory gauges, uint256[] memory weights, bool voted, uint256 baseWeight, int256 adjustedWeight) {
+        gauges = votes[_proposalId][_user].gauges;
+        weights = votes[_proposalId][_user].weights;
+        voted = userInfo[_proposalId][_user].voted;
+        baseWeight = userInfo[_proposalId][_user].baseWeight;
+        adjustedWeight = userInfo[_proposalId][_user].adjustedWeight;
     }
 
     function vote(address[] calldata _gauges, uint256[] calldata _weights) public {
@@ -74,7 +76,7 @@ contract GaugeVotePlatform{
         require(_gauges.length == _weights.length, "mismatch");
         require(userInfo[_proposalId][msg.sender].baseWeight > 0, "!proof");
 
-        //update user weights
+        //update user vote
         delete votes[_proposalId][msg.sender].gauges;
         delete votes[_proposalId][msg.sender].weights;
         uint256 totalweight;
@@ -87,28 +89,65 @@ contract GaugeVotePlatform{
         }
         require(totalweight <= max_weight, "max weight");
         emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
+
+        //set user with voting flag and add to voter list
+        if(!userInfo[_proposalId][msg.sender].voted){
+            userInfo[_proposalId][msg.sender].voted = true;
+            votedUsers[_proposalId].push(msg.sender);
+
+            //since user voted, take weight away from delegate
+            address delegate = userInfo[_proposalId][msg.sender].delegate;
+            if(delegate != msg.sender) {
+                userInfo[_proposalId][delegate].adjustedWeight -= int256(userInfo[_proposalId][delegate].baseWeight);
+                emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
+            }
+        }
     }
 
     function voteWithProofs(address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) public {
-        uint256 _proposalId = proposals.length - 1;
-        _supplyProofs(_proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
+        uint256 proposalId = proposals.length - 1;
+        require(userInfo[proposalId][msg.sender].delegate == address(0), "Proofs already supplied");
+        _supplyProofs( proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
         vote(_gauges, _weights);
-        votedUsers[_proposalId].push(msg.sender);
-        userInfo[_proposalId][msg.sender].voted = true;
     }
 
+    function supplyProofs(bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) public {
+        uint256 proposalId = proposals.length - 1;
+        require(userInfo[proposalId][msg.sender].delegate == address(0), "Proofs already supplied");
+        _supplyProofs(proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
+    }
+
+
+    //supply merkle proof to register user's base weight and adjusted weight
+    //pending weight update can be written to base weight now that proof is done
+    //if there is pending weight change then adjust delegate weight by the difference
     function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) internal {
-        require(userInfo[_proposalId][msg.sender].baseWeight == 0, "Proofs already supplied");
         bytes32 node = keccak256(abi.encodePacked(msg.sender, _delegate, _baseWeight, _adjustedWeight));
         require(MerkleProof.verify(proofs, proposals[_proposalId].baseWeightMerkleRoot, node), 'Invalid proof.');
-        userInfo[_proposalId][msg.sender].baseWeight = _baseWeight;
-        userInfo[_proposalId][msg.sender].adjustedWeight = _adjustedWeight;
-        emit UserWeightChange(_proposalId, msg.sender, _baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
 
-        if(_delegate != msg.sender) {
-            userInfo[_proposalId][_delegate].adjustedWeight -= int256(_baseWeight);
-            emit UserWeightChange(_proposalId, _delegate,  userInfo[_proposalId][_delegate].baseWeight,  userInfo[_proposalId][_delegate].adjustedWeight);
+        //if no delegation then will be equal to self
+        if(_delegate == address(0)){
+            _delegate = msg.sender;
         }
+        //record delegate used for this proposal.
+        userInfo[_proposalId][msg.sender].delegate = _delegate;
+
+        if(userInfo[_proposalId][msg.sender].pendingWeight > 0){
+            userInfo[_proposalId][msg.sender].baseWeight = userInfo[_proposalId][msg.sender].pendingWeight;
+            
+            //add the pending weight onto the delegation weight
+            if(_delegate != msg.sender) {
+                //merkle info has base weight already attributed to the user so add the difference
+                userInfo[_proposalId][_delegate].adjustedWeight += (int256(_baseWeight) - int256(userInfo[_proposalId][msg.sender].pendingWeight));
+                emit UserWeightChange(_proposalId, _delegate,  userInfo[_proposalId][_delegate].baseWeight,  userInfo[_proposalId][_delegate].adjustedWeight);
+            }
+            userInfo[_proposalId][msg.sender].pendingWeight = 0;
+        }else{
+            userInfo[_proposalId][msg.sender].baseWeight = _baseWeight; 
+        }
+        
+        userInfo[_proposalId][msg.sender].adjustedWeight += _adjustedWeight;
+        emit UserWeightChange(_proposalId, msg.sender, userInfo[_proposalId][msg.sender].baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
     }
 
     function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime) public onlyOperator {
@@ -126,12 +165,34 @@ contract GaugeVotePlatform{
     }
 
 
+    //update a user's weight
+    //if already voted, just update self
+    //if proofs supplied, user is still delegating so adjust delegate's weight
+    //if no proofs yet, set weight as pending to be processed later
     function updateUserWeight(uint256 _proposalId, address _user, uint256 _newWeight) external onlyUserManager{
-        require(userInfo[_proposalId][_user].voted, "!voted");
+        //if voted, delegation weight has already been adjusted so just adjust the user's base
+        if(userInfo[_proposalId][_user].voted){
+            userInfo[_proposalId][_user].baseWeight = _newWeight;
 
-        userInfo[_proposalId][_user].baseWeight = _newWeight;
+            emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
+        }else if(userInfo[_proposalId][_user].delegate != address(0)){
 
-        emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
+            //delegate being non zero means proof has been supplied and thus delegate is known. modify delegate's adjusted weight and user's base
+            
+            //adjust delegate first
+            address delegate = userInfo[_proposalId][_user].delegate;
+            if(delegate != _user) {
+                userInfo[_proposalId][delegate].adjustedWeight += (int256(userInfo[_proposalId][_user].baseWeight) - int256(_newWeight));
+                emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
+            }
+
+            //set base weight last
+            userInfo[_proposalId][_user].baseWeight = _newWeight;
+            emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
+        }else{
+            //if no proof supplied yet, save to a pending weight. supply proofs to apply
+            userInfo[_proposalId][_user].pendingWeight = _newWeight;
+        }
     }
 
     function transferOwnership(address _owner) external onlyOwner{
