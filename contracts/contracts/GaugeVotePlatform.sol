@@ -66,40 +66,40 @@ contract GaugeVotePlatform{
     }
 
     function vote(address[] calldata _gauges, uint256[] calldata _weights) public {
-        uint256 _proposalId = proposals.length - 1;
-        require(block.timestamp >= proposals[_proposalId].startTime, "!start");
+        uint256 proposalId = proposals.length - 1;
+        require(block.timestamp >= proposals[proposalId].startTime, "!start");
         if(equalizerAccounts[msg.sender]){
-            require(block.timestamp <= proposals[_proposalId].endTime + overtime, "!end");
+            require(block.timestamp <= proposals[proposalId].endTime + overtime, "!end");
         }else{
-            require(block.timestamp <= proposals[_proposalId].endTime, "!end");
+            require(block.timestamp <= proposals[proposalId].endTime, "!end");
         }
         require(_gauges.length == _weights.length, "mismatch");
-        require(userInfo[_proposalId][msg.sender].baseWeight > 0, "!proof");
+        require(userInfo[proposalId][msg.sender].delegate != address(0), "!proof");
 
         //update user vote
-        delete votes[_proposalId][msg.sender].gauges;
-        delete votes[_proposalId][msg.sender].weights;
+        delete votes[proposalId][msg.sender].gauges;
+        delete votes[proposalId][msg.sender].weights;
         uint256 totalweight;
         for(uint256 i = 0; i < _weights.length; i++) {
             require(_weights[i] > 0, "!weight");
             require(IGaugeRegistry(gaugeRegistry).isGauge(_gauges[i]),"!gauge");
-            votes[_proposalId][msg.sender].gauges.push(_gauges[i]);
-            votes[_proposalId][msg.sender].weights.push(_weights[i]);
+            votes[proposalId][msg.sender].gauges.push(_gauges[i]);
+            votes[proposalId][msg.sender].weights.push(_weights[i]);
             totalweight += _weights[i];
         }
         require(totalweight <= max_weight, "max weight");
-        emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
+        emit VoteCast(proposalId, msg.sender, _gauges, _weights);
 
         //set user with voting flag and add to voter list
-        if(!userInfo[_proposalId][msg.sender].voted){
-            userInfo[_proposalId][msg.sender].voted = true;
-            votedUsers[_proposalId].push(msg.sender);
+        if(!userInfo[proposalId][msg.sender].voted){
+            userInfo[proposalId][msg.sender].voted = true;
+            votedUsers[proposalId].push(msg.sender);
 
             //since user voted, take weight away from delegate
-            address delegate = userInfo[_proposalId][msg.sender].delegate;
+            address delegate = userInfo[proposalId][msg.sender].delegate;
             if(delegate != msg.sender) {
-                userInfo[_proposalId][delegate].adjustedWeight -= int256(userInfo[_proposalId][delegate].baseWeight);
-                emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
+                userInfo[proposalId][delegate].adjustedWeight -= int256(userInfo[proposalId][delegate].baseWeight);
+                emit UserWeightChange(proposalId, delegate,  userInfo[proposalId][delegate].baseWeight,  userInfo[proposalId][delegate].adjustedWeight);
             }
         }
     }
@@ -151,11 +151,16 @@ contract GaugeVotePlatform{
     }
 
     function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime) public onlyOperator {
+        require(_baseWeightMerkleRoot != bytes32(0),"!root");
+
         //only create if no other proposal is live
         uint256 pCnt = proposals.length;
         if(pCnt > 0){
             require(block.timestamp > proposals[pCnt-1].endTime + overtime, "!prev_end");
         }
+
+        //todo: sanity checks on start/end
+
         proposals.push(Proposal({
             baseWeightMerkleRoot: _baseWeightMerkleRoot,
             startTime: _startTime,
