@@ -62,7 +62,7 @@ contract GaugeRegistry is IBridgeMessageReceiver {
     }
 
     function setGauge(address _gauge, bool _isActive) public{
-        require(msg.sender == address(this),"!self");
+        require(msg.sender == address(this) || msg.sender == owner,"!op");
         activeGauges[_gauge] = _isActive;
         emit SetGauge(_gauge, _isActive);
     }

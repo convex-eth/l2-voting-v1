@@ -57,7 +57,7 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
         _;
     }
 
-    function onMessageReceived(address originAddress, uint32 originNetwork, bytes memory data) external payable {
+    function onMessageReceived(address originAddress, uint32 originNetwork, bytes calldata data) external payable {
         require(msg.sender == bridge, "!bridge");
         require(operator == originAddress && originNetwork == 0, "!op");
 

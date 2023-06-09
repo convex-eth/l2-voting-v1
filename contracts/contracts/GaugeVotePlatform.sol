@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-// import "./interfaces/IDelegation.sol";
 import "./interfaces/IGaugeRegistry.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
@@ -15,7 +14,6 @@ contract GaugeVotePlatform{
     address public pendingowner;
     mapping(address => bool) public operators;
 
-    // IDelegation public delegation;
     address public immutable gaugeRegistry;
     address public userManager; //todo: can probably just be immutable?
 
@@ -41,6 +39,13 @@ contract GaugeVotePlatform{
     mapping(uint256 => mapping(address => Vote)) internal votes; // proposalId => user => Vote
     uint256 public constant max_weight = 10000;
 
+    mapping(address => bool) equalizerAccounts;
+    uint256 public constant overtime = 10 minutes;
+
+    function proposalCount() external view returns(uint256){
+        return proposals.length;
+    }
+
     function getVoterCount(uint256 _proposalId) external view returns(uint256){
         return votedUsers[_proposalId].length;
     }
@@ -53,9 +58,14 @@ contract GaugeVotePlatform{
         return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight);
     }
 
-    function vote(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights) public {
+    function vote(address[] calldata _gauges, uint256[] calldata _weights) public {
+        uint256 _proposalId = proposals.length - 1;
         require(block.timestamp >= proposals[_proposalId].startTime, "!start");
-        require(block.timestamp <= proposals[_proposalId].endTime, "!end");
+        if(equalizerAccounts[msg.sender]){
+            require(block.timestamp <= proposals[_proposalId].endTime + overtime, "!end");
+        }else{
+            require(block.timestamp <= proposals[_proposalId].endTime, "!end");
+        }
         require(_gauges.length == _weights.length, "mismatch");
         require(userInfo[_proposalId][msg.sender].baseWeight > 0, "!proof");
 
@@ -74,9 +84,10 @@ contract GaugeVotePlatform{
         emit VoteCast(_proposalId, msg.sender, _gauges, _weights);
     }
 
-    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
+    function voteWithProofs(address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
+        uint256 _proposalId = proposals.length - 1;
         _supplyProofs(_proposalId, proofs, _baseWeight, _delegate);
-        vote(_proposalId, _gauges, _weights);
+        vote(_gauges, _weights);
         votedUsers[_proposalId].push(msg.sender);
     }
 
@@ -94,6 +105,11 @@ contract GaugeVotePlatform{
     }
 
     function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime) public onlyOperator {
+        //only create if no other proposal is live
+        uint256 pCnt = proposals.length;
+        if(pCnt > 0){
+            require(block.timestamp > proposals[pCnt-1].endTime + overtime, "!prev_end");
+        }
         proposals.push(Proposal({
             baseWeightMerkleRoot: _baseWeightMerkleRoot,
             startTime: _startTime,
@@ -128,10 +144,10 @@ contract GaugeVotePlatform{
         emit OperatorSet(_op, _active);
     }
 
-    // function setDelegation(address _delegation) public onlyOwner {
-    //     delegation = IDelegation(_delegation);
-    //     emit DelegationChange(_delegation);
-    // }
+    function setOvertimeAccount(address _eq, bool _active) external onlyOwner{
+        equalizerAccounts[_eq] = _active;
+        emit EqualizerAccountSet(_eq, _active);
+    }
 
     function setUserManager(address _userManager) public onlyOwner {
         userManager = _userManager;
@@ -160,15 +176,13 @@ contract GaugeVotePlatform{
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address indexed op, bool active);
-    // event DelegationChange(address delgation);
+    event EqualizerAccountSet(address indexed eq, bool active);
     event UserManagerChange(address userManager);
 
     constructor(address _guageRegistry) {
         owner = msg.sender;
         operators[msg.sender] = true;
         gaugeRegistry = _guageRegistry;
-        // delegation = IDelegation(delegationContract);
-        // emit DelegationChange(delegationContract);
     }
 
 }
