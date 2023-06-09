@@ -20,6 +20,7 @@ contract GaugeVotePlatform{
     struct UserInfo {
         uint256 baseWeight; //original weight
         int256 adjustedWeight; //signed weight change via delegation change or updated user weight
+        bool voted;
     }
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
     mapping(uint256 => address[]) public votedUsers; // proposalId => votedUsers[]
@@ -54,8 +55,12 @@ contract GaugeVotePlatform{
         return votedUsers[_proposalId][_index];
     }
 
-    function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory, int256) {
-        return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight);
+    function getVote(uint256 _proposalId, address _user) public view returns (address[] memory, uint256[] memory, bool, int256) {
+        int256 voteWeight;
+        if(userInfo[_proposalId][_user].voted){
+            voteWeight = int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight;
+        }
+        return (votes[_proposalId][_user].gauges, votes[_proposalId][_user].weights, userInfo[_proposalId][_user].voted, voteWeight);
     }
 
     function vote(address[] calldata _gauges, uint256[] calldata _weights) public {
@@ -89,6 +94,7 @@ contract GaugeVotePlatform{
         _supplyProofs(_proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
         vote(_gauges, _weights);
         votedUsers[_proposalId].push(msg.sender);
+        userInfo[_proposalId][msg.sender].voted = true;
     }
 
     function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) internal {
@@ -121,7 +127,7 @@ contract GaugeVotePlatform{
 
 
     function updateUserWeight(uint256 _proposalId, address _user, uint256 _newWeight) external onlyUserManager{
-        require(userInfo[_proposalId][_user].baseWeight > 0, "!proof");
+        require(userInfo[_proposalId][_user].voted, "!voted");
 
         userInfo[_proposalId][_user].baseWeight = _newWeight;
 
