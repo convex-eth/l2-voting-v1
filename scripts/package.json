@@ -1,7 +1,9 @@
 {
   "dependencies": {
     "ethers": "5.4",
+    "ethers-multicall": "^0.2.3",
     "keccak256": "^1.0.6",
-    "merkletreejs": "^0.2.4"
+    "merkletreejs": "^0.2.4",
+    "node-fetch": "2.6"
   }
 }
