@@ -2,36 +2,16 @@
 const { BN, time } = require('openzeppelin-test-helpers');
 var jsonfile = require('jsonfile');
 const { assert } = require('chai');
-const merkle = require('../../scripts/merkle');
 var contractList = jsonfile.readFileSync('./contracts.json');
 
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
 const Delegation = artifacts.require("Delegation");
 const GaugeRegistry = artifacts.require("GaugeRegistry");
-const UpdateUserWeight = artifacts.require("UpdateUserWeight");
+const CommitGaugeStatus = artifacts.require("CommitGaugeStatus");
 
 // const IERC20 = artifacts.require("IERC20");
 // const ERC20 = artifacts.require("ERC20");
 
-
-// const unlockAccount = async (address) => {
-//   return new Promise((resolve, reject) => {
-//     web3.currentProvider.send(
-//       {
-//         jsonrpc: "2.0",
-//         method: "evm_unlockUnknownAccount",
-//         params: [address],
-//         id: new Date().getTime(),
-//       },
-//       (err, result) => {
-//         if (err) {
-//           return reject(err);
-//         }
-//         return resolve(result);
-//       }
-//     );
-//   });
-// };
 
 const addAccount = async (address) => {
   return new Promise((resolve, reject) => {
@@ -162,96 +142,50 @@ contract("Deploy System and test", async accounts => {
     userNames[userZ] = "Z";
 
     // merkle data
-    var userBase = {};
-    var userAdjusted = {};
+    var userData = {};
     var userDelegation = {};
-    userBase[userA] = 100;
-    userBase[userX] = 200;
-    userBase[userZ] = 300;
-    userAdjusted[userA] = 0;
-    userAdjusted[userX] = userBase[userA];
-    userAdjusted[userZ] = 0;
+    userData[userA] = 100;
+    userData[userX] = 200;
+    userData[userZ] = 300;
     userDelegation[userA] = userX;
     userDelegation[userX] = userX;
     userDelegation[userZ] = userZ;
-
-    tree = await merkle.createTree(userBase, userAdjusted, userDelegation);
-    console.log(JSON.stringify(tree, null, 2));
 
     let chainContracts = getChainContracts();
     let deployer = chainContracts.system.deployer;
     let multisig = chainContracts.system.multisig;
    
     console.log("deployer: " +deployer);
-    await unlockAccount(deployer);
+    // await unlockAccount(deployer);
 
     console.log("\n\n >>>> Begin Tests >>>>")
 
-    //system
-    var delegation = await Delegation.new({from:deployer});
-    console.log("delegation: " +delegation.address)
+    // var gaugecommit = await CommitGaugeStatus.new();
+    var gaugecommit = await CommitGaugeStatus.at(chainContracts.system.gaugeCommit);
+    console.log("gaugecommit at: " +gaugecommit.address);
+    // return;
+    var gauge = "0xfb18127c1471131468a1aad4785c19678e521d86";
+    var reg = contractList.zkevm.system.gaugeRegistry;
+    console.log("sending message to " +reg);
+    await gaugecommit.commit(gauge, reg,{from:deployer});
+    console.log("commit called");
 
-    var gaugeReg = await GaugeRegistry.new({from:deployer});
-    console.log("gaugeReg: " +gaugeReg.address);
-    await gaugeReg.setOperator(contractList.mainnet.system.gaugeCommit,{from:deployer});
-    console.log("set operator on gauge reg");
+    // return;
 
-    var userManager = await UpdateUserWeight.new({from:deployer})
-    console.log("user manager: " +userManager.address);
+    // var gaugeReg = await GaugeRegistry.new({from:deployer});
+    // // var gaugeReg = await GaugeRegistry.at(reg);
+    // console.log("gaugeReg: " +gaugeReg.address);
+    // await gaugeReg.owner().then(a=>console.log("owner: " +a))
+    // await gaugeReg.operator().then(a=>console.log("operator: " +a))
+    // await gaugeReg.setOperator(contractList.mainnet.system.gaugeCommit,{from:deployer});
+    // await gaugeReg.operator().then(a=>console.log("operator: " +a))
 
-    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, userManager.address, {from:deployer});
-    console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
-
-    console.log("\n\n --- deployed ----")
-
-    // test delegation
-    console.log("delegate userA to userX")
-    await delegation.setDelegate(userX, {from:userA});
-    cdelegate = await delegation.registry(userA, {from:userA});
-    assert.equal(cdelegate.to, userX, "delegate to userX");
-
-    cdelegate = await delegation.getDelegate(userA, {from:userA});
-    console.log("UserA delegate current:"+cdelegate);
-    assert.equal(cdelegate, userA, "delegation current");
-    // advance time 1 week
-    await advanceTime(7*day);
-    cdelegate = await delegation.getDelegate(userA, {from:userA});
-    console.log("UserA delegate next epoch:"+cdelegate);
-    assert.equal(cdelegate, userX, "delegation next epoch");
-
-
-
-    console.log("Create proposal");
-    //fill some fake gauges
-    var gaugeA = "0xfb18127c1471131468a1aad4785c19678e521d86";
-    var gaugeB = "0x2932a86df44fe8d2a706d8e9c5d51c24883423f5";
-    await gaugeReg.setGauge(gaugeA,true,{from:deployer});
-    await gaugeReg.setGauge(gaugeB,true,{from:deployer});
-    var _baseWeightMerkleRoot = tree.root;
-    var _startTime = await currentTime();
-    var _endTime = _startTime + 4*day;
-    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime, {from:deployer});
-    
-    var proposal = await gaugeVotePlatform.proposals(0);
-    console.log(proposal);
-
-    console.log("Vote with proofs");
-    //    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
-    var _proposalId = 0;
-    var _gauges = [gaugeA, gaugeB];
-    var _weights = [4000, 6000];
-    var _proofs = tree.users[userA].proof;
-    var _baseWeight = userBase[userA];
-    var _adjustedWeight = userAdjusted[userA];
-    var _delegate = userX;
-
-  
-    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, _proofs, _baseWeight, _adjustedWeight, _delegate, {from:userA});
-
-    var vote = await gaugeVotePlatform.getVote(0, userA, {from:userA});
-    console.log(JSON.stringify(vote));
-    
-
+    // var bridge = "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe";
+    // await unlockAccount(bridge);
+    // var testcalldata = "0x4f0d36a4000000000000000000000000fb18127c1471131468a1aad4785c19678e521d860000000000000000000000000000000000000000000000000000000000000001";
+    // var tx = await gaugeReg.onMessageReceived(contractList.mainnet.system.gaugeCommit,0,testcalldata,{from:bridge,gasPrice:0});
+    // console.log(tx.logs[0].args);
+    // await gaugeReg.setGauge(gauge,true).catch(a=>console.log("catch: " +a));
 
     return;
   });
