@@ -159,7 +159,9 @@ contract GaugeVotePlatform{
             require(block.timestamp > proposals[pCnt-1].endTime + overtime, "!prev_end");
         }
 
-        //todo: sanity checks on start/end
+        require(_endTime > _startTime, "!time");
+        require(_endTime - _startTime >= 3 days, "!time");
+        require(_endTime - _startTime <= 6 days, "!time");
 
         proposals.push(Proposal({
             baseWeightMerkleRoot: _baseWeightMerkleRoot,
@@ -169,12 +171,23 @@ contract GaugeVotePlatform{
         emit NewProposal(proposals.length-1, _baseWeightMerkleRoot, _startTime, _endTime);
     }
 
+    function forceEndProposal() public onlyOperator {
+        uint256 proposalId = proposals.length - 1;
+        proposals[proposalId].baseWeightMerkleRoot = 0;
+        proposals[proposalId].startTime = 0;
+        proposals[proposalId].endTime = 0;
+        emit ForceEndProposal(proposalId);
+    }
+
 
     //update a user's weight
     //if already voted, just update self
     //if proofs supplied, user is still delegating so adjust delegate's weight
     //if no proofs yet, set weight as pending to be processed later
     function updateUserWeight(uint256 _proposalId, address _user, uint256 _newWeight) external onlyUserManager{
+        require(block.timestamp >= proposals[_proposalId].startTime, "!start");
+        require(block.timestamp <= proposals[_proposalId].endTime, "!end");
+
         //if voted, delegation weight has already been adjusted so just adjust the user's base
         if(userInfo[_proposalId][_user].voted){
             userInfo[_proposalId][_user].baseWeight = _newWeight;
@@ -241,6 +254,7 @@ contract GaugeVotePlatform{
 
     event VoteCast(uint256 indexed proposalId, address indexed user, address[] gauges, uint256[] weights);
     event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
+    event ForceEndProposal(uint256 indexed id);
     event UserWeightChange(uint256 indexed pid, address indexed user, uint256 baseWeight, int256 adjustedWeight);
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
