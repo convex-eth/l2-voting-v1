@@ -27,7 +27,7 @@ var provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
 var callProvider = new Provider(provider);
 
 const lockerAddress = "0x72a19342e8F1838460eBFCCEf09F6585e32db86E";
-const lockerAbi = [{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"epochs","outputs":[{"internalType":"uint224","name":"supply","type":"uint224"},{"internalType":"uint32","name":"date","type":"uint32"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"_user","type":"address"},{"indexed":true,"internalType":"uint256","name":"_epoch","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"_paidAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"_lockedAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"_boostedAmount","type":"uint256"}],"name":"Staked","type":"event"},{"inputs":[{"internalType":"uint256","name":"_epoch","type":"uint256"},{"internalType":"address","name":"_user","type":"address"}],"name":"balanceAtEpochOf","outputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"epochCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
+const lockerAbi = [{"inputs":[{"internalType":"address","name":"_user","type":"address"}],"name":"lockedBalanceOf","outputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"epochs","outputs":[{"internalType":"uint224","name":"supply","type":"uint224"},{"internalType":"uint32","name":"date","type":"uint32"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"_user","type":"address"},{"indexed":true,"internalType":"uint256","name":"_epoch","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"_paidAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"_lockedAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"_boostedAmount","type":"uint256"}],"name":"Staked","type":"event"},{"inputs":[{"internalType":"uint256","name":"_epoch","type":"uint256"},{"internalType":"address","name":"_user","type":"address"}],"name":"balanceAtEpochOf","outputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"epochCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 
 const lockerMulti = new Contract(lockerAddress, lockerAbi);
 const locker = new ethers.Contract(lockerAddress, lockerAbi, provider);
@@ -39,15 +39,19 @@ module.exports = {
         var currentBlock = await provider.getBlockNumber();
         if(fullsync) { cache.blockHeight = 14320609; cache.userBase = {}; cache.userDelegation = {}; cache.userAdjusted = {}; }
         var startBlock = cache.blockHeight;
+        eventsAll = [];
         while(startBlock < currentBlock){
             endBlock = startBlock + 100000;
             if(endBlock > currentBlock){
                 endBlock = currentBlock;
             }
             console.log("getting events from " + startBlock + " to " + endBlock);
-            var events = await locker.queryFilter(locker.filters.Staked(),startBlock,endBlock);
-            stakedEvents = stakedEvents.concat(events);
+            eventsAll.push(locker.queryFilter(locker.filters.Staked(),startBlock,endBlock));
             startBlock = endBlock;
+        }
+        eventsAll = await Promise.all(eventsAll);
+        for(var i=0; i < eventsAll.length; i++){
+            stakedEvents = stakedEvents.concat(eventsAll[i]);
         }
         var userBase = cache.userBase;
         for(var i=0; i < stakedEvents.length; i++){
@@ -79,70 +83,113 @@ module.exports = {
         currentEpoch = latestIndex>epochIndex ? epochIndex+1 : epochIndex;
         console.log("current epoch: "+currentEpoch);
 
-        addressList = Object.keys(cache.userBase);
-        balances = [];
-        for(var i=0; i < addressList.length; i++) {
-            console.log("fetching balances for "+(i+1000 > addressList.length ? addressList.length : i+1000)+" of "+addressList.length)
-            calls = [];
-            while(calls.length < 1000 && i < addressList.length) {
-                calls.push(lockerMulti.balanceAtEpochOf(currentEpoch, addressList[i]));
-                i++;
-            }        
-            balances = balances.concat(await callProvider.all(calls));
-            i--;
-        }
+        let querySize = 1000;
+        addressArray = Object.keys(cache.userBase);
+        cache.userBase = {};
+        var groups = Number( (addressArray.length/querySize) + 1).toFixed(0);
         totalVlCVX = 0;
-        for(var i=0; i < addressList.length; i++) {
-            cache.userBase[addressList[i]] = balances[i].toString();
-            totalVlCVX += Number(ethers.utils.formatUnits(balances[i],18));
-        }
+        await Promise.all([...Array(Number(groups)).keys()].map(async i => {
+            var start = i*querySize;
+            var finish = i*querySize + querySize - 1;
+            if(finish >= addressArray.length){
+                finish = addressArray.length - 1;
+            }
+            console.log("get balances from " + start + " to " +finish);
+            var calldata = [];
+            var addresses = [];
+            for(var c = start; c <= finish; c++){
+                calldata.push(lockerMulti.balanceAtEpochOf(currentEpoch, addressArray[c]));
+                addresses.push(addressArray[c]);
+            }
+            //console.log(calldata);
+            let balData = await callProvider.all(calldata);
+            for(var d = 0; d < balData.length; d++){
+                // if(balData[d] == "0x")continue;
+                // console.log("baldata[d]: " +balData[d]);
+                var bal = ethers.BigNumber.from(balData[d]);
+                cache.userBase[ethers.utils.getAddress(addresses[d])] = bal.toString();
+                totalVlCVX += Number(ethers.utils.formatUnits(bal,18));
+            }
+        }));
+
         console.log("Total vlCVX: "+totalVlCVX);
         fs.writeFileSync('./cache.json', JSON.stringify(cache));
         console.log("Balances cache updated");
         return cache.userBase;
     },
     getDelegations: async function () {
-        userList = Object.keys(cache.userBase);
-        i = 0;
-        delegations = [];
-        while(i <= userList.length-500) {
-            console.log("fetching delegations for "+(i+500 > userList.length ? userList.length : i+500)+" of "+userList.length)
-            call = await fetch("https://api.thegraph.com/subgraphs/name/snapshot-labs/snapshot", {
-                "headers": {
-                  "accept": "application/json, multipart/mixed",
-                  "content-type": "application/json",
-                  "pragma": "no-cache",
-                },
-                "body": "{\"query\":\"{\\n  delegations(where: {delegator_in: "+addslashes(JSON.stringify(userList.slice(i, i+500)))+", space_in: [\\\"\\\", \\\"cvx.eth\\\"]}, first: 1000) {\\n    delegator\\n    space\\n    delegate\\n  }\\n}\"}",
-                "method": "POST"
-              });
-            response = await call.json();
-            delegations = delegations.concat(response.data.delegations);
-            i += 500;
-        }
-        if(i < userList.length) {
-            console.log("fetching delegations for "+(i+500 > userList.length ? userList.length : i+500)+" of "+userList.length)
-            call = await fetch("https://api.thegraph.com/subgraphs/name/snapshot-labs/snapshot", {
-                "headers": {
-                  "accept": "application/json, multipart/mixed",
-                  "content-type": "application/json",
-                  "pragma": "no-cache",
-                },
-                "body": "{\"query\":\"{\\n  delegations(where: {delegator_in: "+addslashes(JSON.stringify(userList.slice(i, userList.length)))+", space_in: [\\\"\\\", \\\"cvx.eth\\\"]}, first: 1000) {\\n    delegator\\n    space\\n    delegate\\n  }\\n}\"}",
-                "method": "POST"
-              });
-            response = await call.json();
-            delegations = delegations.concat(response.data.delegations);
-        }
+        await callProvider.init();
+        let querySize = 600;
+        addressArray = Object.keys(cache.userBase);
+        var groups = Number( (addressArray.length/querySize) + 1).toFixed(0);
         userDelegation = {};
-        for(var i=0; i < delegations.length; i++) {
-            if(userDelegation[ethers.utils.getAddress(delegations[i].delegator)] == undefined) { 
-                userDelegation[ethers.utils.getAddress(delegations[i].delegator)] = ethers.utils.getAddress(delegations[i].delegate);
-            } else if(delegations[i].space == "cvx.eth") {
-                userDelegation[ethers.utils.getAddress(delegations[i].delegator)] = ethers.utils.getAddress(delegations[i].delegate);
+        await Promise.all([...Array(Number(groups)).keys()].map(async i => {
+            var start = i*querySize;
+            var finish = i*querySize + querySize - 1;
+            if(finish >= addressArray.length){
+                finish = addressArray.length - 1;
             }
+            console.log("get delegations from " + start + " to " +finish);
+            var calldata = [];
+            var addresses = [];
+            for(var c = start; c <= finish; c++){
+                addresses.push(addressArray[c]);
+            }
+            //console.log(calldata);
+            
+            call = await fetch("https://api.thegraph.com/subgraphs/name/snapshot-labs/snapshot", {
+                "headers": {
+                  "accept": "application/json, multipart/mixed",
+                  "content-type": "application/json",
+                  "pragma": "no-cache",
+                },
+                "body": "{\"query\":\"{\\n  delegations(where: {delegator_in: "+addslashes(JSON.stringify(addresses))+", space_in: [\\\"\\\", \\\"cvx.eth\\\"]}, first: 1000) {\\n    delegator\\n    space\\n    delegate\\n  }\\n}\"}",
+                "method": "POST"
+              });
+            response = await call.json();
+            delegations = response.data.delegations;
+            for(var d = 0; d < delegations.length; d++){
+                if(userDelegation[ethers.utils.getAddress(delegations[d].delegator)] == undefined) {
+                    userDelegation[ethers.utils.getAddress(delegations[d].delegator)] = ethers.utils.getAddress(delegations[d].delegate);
+                } else if(delegations[d].space == "cvx.eth") {
+                    userDelegation[ethers.utils.getAddress(delegations[d].delegator)] = ethers.utils.getAddress(delegations[d].delegate);
+                }
+            }
+        }));
 
+        let zeroBalanceList = [];
+        for(user in cache.userBase) {
+            if(cache.userBase[user] == 0) {
+                zeroBalanceList.push(user);
+            }
         }
+        querySize = 1000;
+        var groups = Number( (zeroBalanceList.length/querySize) + 1).toFixed(0);
+        await Promise.all([...Array(Number(groups)).keys()].map(async i => {
+            var start = i*querySize;
+            var finish = i*querySize + querySize - 1;
+            if(finish >= zeroBalanceList.length){
+                finish = zeroBalanceList.length - 1;
+            }
+            console.log("Checking 0 balance addresses from " + start + " to " +finish);
+            var calldata = [];
+            var addresses = [];
+            for(var c = start; c <= finish; c++){
+                calldata.push(lockerMulti.balanceAtEpochOf(currentEpoch, zeroBalanceList[c]));
+                addresses.push(zeroBalanceList[c]);
+            }
+            //console.log(calldata);
+            let balData = await callProvider.all(calldata);
+            for(var d = 0; d < balData.length; d++){
+                // if(balData[d] == "0x")continue;
+                // console.log("baldata[d]: " +balData[d]);
+                var bal = ethers.BigNumber.from(balData[d]);
+                if(bal.toString() == "0") {
+                    delete cache.userBase[ethers.utils.getAddress(addresses[d])];
+                }
+            }
+        }));
+
         userAdjusted = {};
         for(user in cache.userBase) {
             if(userDelegation[user] == undefined) {
