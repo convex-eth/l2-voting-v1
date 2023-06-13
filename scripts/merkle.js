@@ -1,7 +1,7 @@
 const { MerkleTree } = require('merkletreejs')
 const keccak256 = require('keccak256')
 const { ethers } = require("ethers");
-const { Contract, Provider } = require('ethers-multicall');
+const { Contract, Provider } = require('@pelith/ethers-multicall'); // multicall with archive support
 const fs = require('fs');
 const fetch = require('node-fetch');
 
@@ -31,6 +31,20 @@ const lockerAbi = [{"inputs":[{"internalType":"address","name":"_user","type":"a
 
 const lockerMulti = new Contract(lockerAddress, lockerAbi);
 const locker = new ethers.Contract(lockerAddress, lockerAbi, provider);
+
+// set local timezone to UTC
+process.env.TZ = 'UTC';
+// set local language to English
+process.env.LANG = 'en_US.UTF-8';
+
+const newEpoch = Math.floor(Date.now()/1000/(86400*7))*86400*7;
+
+// format timestamp as "Week of 8th Jun 2023"
+date = new Date(newEpoch*1000);
+day = date.getDate();
+month = date.toLocaleString('default', { month: 'short' });
+year = date.getFullYear();
+const epochString = "Week of "+day+" "+month+" "+year;
 
 module.exports = {
     getUsers: async function (fullsync=false) {
@@ -66,7 +80,8 @@ module.exports = {
         fs.writeFileSync('./cache.json', JSON.stringify(cache));
         console.log("User list cache updated");
     },
-    getLockedBalances: async function () {
+    getLockedBalances: async function (target_block) {
+
         await callProvider.init();
         currentEpoch = Math.floor(Date.now()/1000/(86400*7))*86400*7;
         latestIndex = await locker.epochCount();
@@ -102,7 +117,7 @@ module.exports = {
                 addresses.push(addressArray[c]);
             }
             //console.log(calldata);
-            let balData = await callProvider.all(calldata);
+            let balData = await callProvider.all(calldata, target_block);
             for(var d = 0; d < balData.length; d++){
                 // if(balData[d] == "0x")continue;
                 // console.log("baldata[d]: " +balData[d]);
@@ -117,7 +132,7 @@ module.exports = {
         console.log("Balances cache updated");
         return cache.userBase;
     },
-    getDelegations: async function () {
+    getDelegations: async function (target_block) {
         await callProvider.init();
         let querySize = 600;
         addressArray = Object.keys(cache.userBase);
@@ -179,7 +194,7 @@ module.exports = {
                 addresses.push(zeroBalanceList[c]);
             }
             //console.log(calldata);
-            let balData = await callProvider.all(calldata);
+            let balData = await callProvider.all(calldata, target_block);
             for(var d = 0; d < balData.length; d++){
                 // if(balData[d] == "0x")continue;
                 // console.log("baldata[d]: " +balData[d]);
@@ -226,8 +241,10 @@ module.exports = {
         console.log("Delegations cache updated");
         return [userAdjusted, userDelegation];
     },
-	createTree: async function (userBase, userAdjusted, userDelegation) {
+	createTree: async function (userBase, userAdjusted, userDelegation, target_block) {
         var elements = [];
+        // sort userBase object by key
+        userBase = Object.keys(userBase).sort().reduce((r, k) => (r[k] = userBase[k], r), {});
         userlist = Object.keys(userBase);
         for(user in userBase){
             // abi encode packed user, delegate, base amount, adjustment
@@ -238,7 +255,7 @@ module.exports = {
         const merkleTree = new MerkleTree(elements, keccak256, { sortPairs: true })
         const root = merkleTree.getRoot()
 
-        var compiledProofs = {root: "0x"+bufToHex(root),blockHeight:1,users:{}};
+        var compiledProofs = {root: "0x"+bufToHex(root),blockHeight:target_block,users:{}};
         for(var i=0; i < elements.length; i++){
             var proofbytes = merkleTree.getProof(elements[i]);
             var proofHex = proofbytes.map(e => "0x"+e.data.toString('hex'));
@@ -263,8 +280,8 @@ module.exports = {
             compiledProofs.users[address]["delegate"] = delegate;
 
         }
-        fs.writeFileSync('./'+cache.blockHeight+'.json', JSON.stringify(compiledProofs));
-        console.log("Merkle tree written to file "+cache.blockHeight+".json");
+        fs.writeFileSync('./'+epochString+'.json', JSON.stringify(compiledProofs));
+        console.log("Merkle tree written to file "+epochString+".json");
         return compiledProofs;
     }
 }

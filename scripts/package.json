@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "@pelith/ethers-multicall": "^0.2.2",
+    "ethereum-block-by-date": "^1.4.7",
     "ethers": "5.4",
     "ethers-multicall": "^0.2.3",
     "keccak256": "^1.0.6",
