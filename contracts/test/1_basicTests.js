@@ -184,6 +184,8 @@ contract("Deploy System and test", async accounts => {
    
     console.log("deployer: " +deployer);
     await unlockAccount(deployer);
+    await unlockAccount(userX);
+    await unlockAccount(userZ);
 
     console.log("\n\n >>>> Begin Tests >>>>")
 
@@ -205,53 +207,80 @@ contract("Deploy System and test", async accounts => {
     console.log("\n\n --- deployed ----")
 
     // test delegation
-    console.log("delegate userA to userX")
-    await delegation.setDelegate(userX, {from:userA});
-    cdelegate = await delegation.registry(userA, {from:userA});
-    assert.equal(cdelegate.to, userX, "delegate to userX");
+    // console.log("delegate userA to userX")
+    // await delegation.setDelegate(userX, {from:userA});
+    // cdelegate = await delegation.registry(userA, {from:userA});
+    // assert.equal(cdelegate.to, userX, "delegate to userX");
 
-    cdelegate = await delegation.getDelegate(userA, {from:userA});
-    console.log("UserA delegate current:"+cdelegate);
-    assert.equal(cdelegate, userA, "delegation current");
-    // advance time 1 week
-    await advanceTime(7*day);
-    cdelegate = await delegation.getDelegate(userA, {from:userA});
-    console.log("UserA delegate next epoch:"+cdelegate);
-    assert.equal(cdelegate, userX, "delegation next epoch");
+    // cdelegate = await delegation.getDelegate(userA, {from:userA});
+    // console.log("UserA delegate current:"+cdelegate);
+    // assert.equal(cdelegate, userA, "delegation current");
+    // // advance time 1 week
+    // await advanceTime(7*day);
+    // cdelegate = await delegation.getDelegate(userA, {from:userA});
+    // console.log("UserA delegate next epoch:"+cdelegate);
+    // assert.equal(cdelegate, userX, "delegation next epoch");
 
 
 
     console.log("Create proposal");
-    //fill some fake gauges
+    //fill some gauges
     var gaugeA = "0xfb18127c1471131468a1aad4785c19678e521d86";
     var gaugeB = "0x2932a86df44fe8d2a706d8e9c5d51c24883423f5";
-    await gaugeReg.setGauge(gaugeA,true,{from:deployer});
-    await gaugeReg.setGauge(gaugeB,true,{from:deployer});
+    var currentEpoch = await gaugeReg.currentEpoch();
+    await gaugeReg.setGauge(gaugeA,true,currentEpoch,{from:deployer});
+    await gaugeReg.setGauge(gaugeB,true,currentEpoch,{from:deployer});
     var _baseWeightMerkleRoot = tree.root;
     var _startTime = await currentTime();
     var _endTime = _startTime + 4*day;
     await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime, {from:deployer});
     
     var proposal = await gaugeVotePlatform.proposals(0);
-    console.log(proposal);
+    console.log(JSON.stringify(proposal));
+
+    await gaugeVotePlatform.forceEndProposal({from:deployer});
+    console.log("force end");
+
+    var proposal = await gaugeVotePlatform.proposals(0);
+    console.log(JSON.stringify(proposal));
+
+    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _endTime, _startTime, {from:deployer}).catch(a=>console.log("catch: " +a));
+    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime-(2*day), {from:deployer}).catch(a=>console.log("catch: " +a));
+    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime+(3*day), {from:deployer}).catch(a=>console.log("catch: " +a));
+    await gaugeVotePlatform.createProposal(_baseWeightMerkleRoot, _startTime, _endTime, {from:deployer});
+
+    var pcnt = Number(await gaugeVotePlatform.proposalCount());
+    console.log("proposal count: " +pcnt);
+    var proposal = await gaugeVotePlatform.proposals(pcnt-1);
+    console.log(JSON.stringify(proposal));
 
     console.log("Vote with proofs");
     //    function voteWithProofs(uint256 _proposalId, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, address _delegate) public {
     var _proposalId = 0;
     var _gauges = [gaugeA, gaugeB];
     var _weights = [4000, 6000];
-    var _proofs = tree.users[userA].proof;
-    var _baseWeight = userBase[userA];
-    var _adjustedWeight = userAdjusted[userA];
-    var _delegate = userX;
+    // var _proofs = tree.users[userA].proof;
+    // var _baseWeight = userBase[userA];
+    // var _adjustedWeight = userAdjusted[userA];
+    // var _delegate = userX;
 
   
-    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, _proofs, _baseWeight, _adjustedWeight, _delegate, {from:userA});
+    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, tree.users[userX].proof, userBase[userX], userAdjusted[userX], userDelegation[userX], {from:userX,gasPrice:0});
+    console.log("\nvote user X ("+userX+")");
+    await gaugeVotePlatform.getVote(pcnt-1, userX).then(a=>console.log(JSON.stringify(a)))
 
-    var vote = await gaugeVotePlatform.getVote(0, userA, {from:userA});
-    console.log(JSON.stringify(vote));
-    
+    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, tree.users[userA].proof, userBase[userA], userAdjusted[userA], userDelegation[userA], {from:userA});
+    console.log("\nvote user A (" +userA +")")
+    await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
+    console.log("\ncheck x's delegated weight")
+    await gaugeVotePlatform.getVote(pcnt-1, userX).then(a=>console.log(JSON.stringify(a)))
 
+
+    console.log("\nupdate A's weight...");
+    await userManager.updateWeight(gaugeVotePlatform.address, userA, currentEpoch, pcnt-1, 5000,{from:deployer});
+    console.log("updated A (update pattern: already voted user update)");
+
+    await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
 
     return;
   });

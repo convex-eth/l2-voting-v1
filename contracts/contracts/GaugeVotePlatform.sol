@@ -98,7 +98,7 @@ contract GaugeVotePlatform{
             //since user voted, take weight away from delegate
             address delegate = userInfo[proposalId][msg.sender].delegate;
             if(delegate != msg.sender) {
-                userInfo[proposalId][delegate].adjustedWeight -= int256(userInfo[proposalId][delegate].baseWeight);
+                userInfo[proposalId][delegate].adjustedWeight -= int256(userInfo[proposalId][msg.sender].baseWeight);
                 emit UserWeightChange(proposalId, delegate,  userInfo[proposalId][delegate].baseWeight,  userInfo[proposalId][delegate].adjustedWeight);
             }
         }
