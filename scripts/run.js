@@ -26,7 +26,7 @@ async function main() {
     }
     await merkle.getLockedBalances(target_block);
     await await merkle.getDelegations(target_block);
-    [userBase, userAdjusted, userDelegation] = await merkle.cleanUp(target_block);
+    [userBase, userAdjusted, userDelegation] = await merkle.cleanUp();
     tree = await merkle.createTree(userBase, userAdjusted, userDelegation, target_block);
     endTime = Date.now();
     console.log(`\nTime elapsed: ${(endTime - startTime) / 1000} seconds`);
