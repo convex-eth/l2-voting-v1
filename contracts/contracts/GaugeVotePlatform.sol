@@ -111,7 +111,7 @@ contract GaugeVotePlatform{
         }
     }
 
-    function canSign(address _account) internal returns(bool){
+    function canSign(address _account) internal view returns(bool){
         if(msg.sender == _account){
             return true;
         }
