@@ -2,6 +2,7 @@
 pragma solidity ^0.8.10;
 
 import "./interfaces/IGaugeRegistry.sol";
+import "./interfaces/ISurrogateRegistry.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 
@@ -15,6 +16,7 @@ contract GaugeVotePlatform{
     mapping(address => bool) public operators;
 
     address public immutable gaugeRegistry;
+    address public immutable surrogateRegistry;
     address public immutable userManager;
 
     struct UserInfo {
@@ -57,6 +59,11 @@ contract GaugeVotePlatform{
         return votedUsers[_proposalId][_index];
     }
 
+    //proof is known to be supplied if the delegate is a non zero address
+    function isProofSupplied(uint256 _proposalId, address _account) public view returns(bool){
+        return userInfo[_proposalId][_account].delegate != address(0);
+    }
+
     function getVote(uint256 _proposalId, address _user) public view returns (address[] memory gauges, uint256[] memory weights, bool voted, uint256 baseWeight, int256 adjustedWeight) {
         gauges = votes[_proposalId][_user].gauges;
         weights = votes[_proposalId][_user].weights;
@@ -65,89 +72,103 @@ contract GaugeVotePlatform{
         adjustedWeight = userInfo[_proposalId][_user].adjustedWeight;
     }
 
-    function vote(address[] calldata _gauges, uint256[] calldata _weights) public {
+    function _vote(address _account, address[] calldata _gauges, uint256[] calldata _weights) internal {
         uint256 proposalId = proposals.length - 1;
         require(block.timestamp >= proposals[proposalId].startTime, "!start");
-        if(equalizerAccounts[msg.sender]){
+        if(equalizerAccounts[_account]){
             require(block.timestamp <= proposals[proposalId].endTime + overtime, "!end");
         }else{
             require(block.timestamp <= proposals[proposalId].endTime, "!end");
         }
         require(_gauges.length == _weights.length, "mismatch");
-        require(userInfo[proposalId][msg.sender].delegate != address(0), "!proof");
+        require(userInfo[proposalId][_account].delegate != address(0), "!proof");
 
         //update user vote
-        delete votes[proposalId][msg.sender].gauges;
-        delete votes[proposalId][msg.sender].weights;
+        delete votes[proposalId][_account].gauges;
+        delete votes[proposalId][_account].weights;
         uint256 totalweight;
         for(uint256 i = 0; i < _weights.length; i++) {
             require(_weights[i] > 0, "!weight");
             require(IGaugeRegistry(gaugeRegistry).isGauge(_gauges[i]),"!gauge");
-            votes[proposalId][msg.sender].gauges.push(_gauges[i]);
-            votes[proposalId][msg.sender].weights.push(_weights[i]);
+            votes[proposalId][_account].gauges.push(_gauges[i]);
+            votes[proposalId][_account].weights.push(_weights[i]);
             totalweight += _weights[i];
         }
         require(totalweight <= max_weight, "max weight");
-        emit VoteCast(proposalId, msg.sender, _gauges, _weights);
+        emit VoteCast(proposalId, _account, _gauges, _weights);
 
         //set user with voting flag and add to voter list
-        if(!userInfo[proposalId][msg.sender].voted){
-            userInfo[proposalId][msg.sender].voted = true;
-            votedUsers[proposalId].push(msg.sender);
+        if(!userInfo[proposalId][_account].voted){
+            userInfo[proposalId][_account].voted = true;
+            votedUsers[proposalId].push(_account);
 
             //since user voted, take weight away from delegate
-            address delegate = userInfo[proposalId][msg.sender].delegate;
-            if(delegate != msg.sender) {
-                userInfo[proposalId][delegate].adjustedWeight -= int256(userInfo[proposalId][msg.sender].baseWeight);
+            address delegate = userInfo[proposalId][_account].delegate;
+            if(delegate != _account) {
+                userInfo[proposalId][delegate].adjustedWeight -= int256(userInfo[proposalId][_account].baseWeight);
                 emit UserWeightChange(proposalId, delegate,  userInfo[proposalId][delegate].baseWeight,  userInfo[proposalId][delegate].adjustedWeight);
             }
         }
     }
 
-    function voteWithProofs(address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) public {
-        uint256 proposalId = proposals.length - 1;
-        require(userInfo[proposalId][msg.sender].delegate == address(0), "Proofs already supplied");
-        _supplyProofs( proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
-        vote(_gauges, _weights);
+    function canSign(address _account) internal returns(bool){
+        if(msg.sender == _account){
+            return true;
+        }
+        if(ISurrogateRegistry(surrogateRegistry).isSurrogate(_account, msg.sender)){
+            return true;
+        }
+        return false;
     }
 
-    function supplyProofs(bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) public {
+    function vote(address _account, address[] calldata _gauges, uint256[] calldata _weights) external onlyAcceptedSigner(_account){
+        _vote(_account, _gauges, _weights);
+    }
+
+    function voteWithProofs(address _account, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) external onlyAcceptedSigner(_account){
         uint256 proposalId = proposals.length - 1;
-        require(userInfo[proposalId][msg.sender].delegate == address(0), "Proofs already supplied");
-        _supplyProofs(proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
+        require(!isProofSupplied(proposalId,_account), "Proofs already supplied");
+        _supplyProofs(_account, proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
+        _vote(_account, _gauges, _weights);
+    }
+
+    function supplyProofs(address _account, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) external onlyAcceptedSigner(_account){
+        uint256 proposalId = proposals.length - 1;
+        require(!isProofSupplied(proposalId,_account), "Proofs already supplied");
+        _supplyProofs(_account, proposalId, proofs, _baseWeight, _adjustedWeight, _delegate);
     }
 
 
     //supply merkle proof to register user's base weight and adjusted weight
     //pending weight update can be written to base weight now that proof is done
     //if there is pending weight change then adjust delegate weight by the difference
-    function _supplyProofs(uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) internal {
-        bytes32 node = keccak256(abi.encodePacked(msg.sender, _delegate, _baseWeight, _adjustedWeight));
+    function _supplyProofs(address _account, uint256 _proposalId, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) internal {
+        bytes32 node = keccak256(abi.encodePacked(_account, _delegate, _baseWeight, _adjustedWeight));
         require(MerkleProof.verify(proofs, proposals[_proposalId].baseWeightMerkleRoot, node), 'Invalid proof.');
 
         //if no delegation then will be equal to self
         if(_delegate == address(0)){
-            _delegate = msg.sender;
+            _delegate = _account;
         }
         //record delegate used for this proposal.
-        userInfo[_proposalId][msg.sender].delegate = _delegate;
+        userInfo[_proposalId][_account].delegate = _delegate;
 
-        if(userInfo[_proposalId][msg.sender].pendingWeight > 0){
-            userInfo[_proposalId][msg.sender].baseWeight = userInfo[_proposalId][msg.sender].pendingWeight;
+        if(userInfo[_proposalId][_account].pendingWeight > 0){
+            userInfo[_proposalId][_account].baseWeight = userInfo[_proposalId][_account].pendingWeight;
             
             //add the pending weight onto the delegation weight
-            if(_delegate != msg.sender) {
+            if(_delegate != _account) {
                 //merkle info has base weight already attributed to the user so add the difference
-                userInfo[_proposalId][_delegate].adjustedWeight += (int256(_baseWeight) - int256(userInfo[_proposalId][msg.sender].pendingWeight));
+                userInfo[_proposalId][_delegate].adjustedWeight += (int256(_baseWeight) - int256(userInfo[_proposalId][_account].pendingWeight));
                 emit UserWeightChange(_proposalId, _delegate,  userInfo[_proposalId][_delegate].baseWeight,  userInfo[_proposalId][_delegate].adjustedWeight);
             }
-            userInfo[_proposalId][msg.sender].pendingWeight = 0;
+            userInfo[_proposalId][_account].pendingWeight = 0;
         }else{
-            userInfo[_proposalId][msg.sender].baseWeight = _baseWeight; 
+            userInfo[_proposalId][_account].baseWeight = _baseWeight; 
         }
         
-        userInfo[_proposalId][msg.sender].adjustedWeight += _adjustedWeight;
-        emit UserWeightChange(_proposalId, msg.sender, userInfo[_proposalId][msg.sender].baseWeight,  userInfo[_proposalId][msg.sender].adjustedWeight);
+        userInfo[_proposalId][_account].adjustedWeight += _adjustedWeight;
+        emit UserWeightChange(_proposalId, _account, userInfo[_proposalId][_account].baseWeight,  userInfo[_proposalId][_account].adjustedWeight);
     }
 
     function createProposal(bytes32 _baseWeightMerkleRoot, uint256 _startTime, uint256 _endTime) public onlyOperator {
@@ -193,9 +214,9 @@ contract GaugeVotePlatform{
             userInfo[_proposalId][_user].baseWeight = _newWeight;
 
             emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
-        }else if(userInfo[_proposalId][_user].delegate != address(0)){
+        }else if(isProofSupplied(_proposalId, _user)){
 
-            //delegate being non zero means proof has been supplied and thus delegate is known. modify delegate's adjusted weight and user's base
+            //proof has been supplied and thus delegate is known. modify delegate's adjusted weight and user's base
             
             //adjust delegate first
             address delegate = userInfo[_proposalId][_user].delegate;
@@ -251,6 +272,10 @@ contract GaugeVotePlatform{
         _;
     }
 
+    modifier onlyAcceptedSigner(address _account) {
+        require(canSign(_account), "!signer");
+        _;
+    }
 
     event VoteCast(uint256 indexed proposalId, address indexed user, address[] gauges, uint256[] weights);
     event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
@@ -261,10 +286,11 @@ contract GaugeVotePlatform{
     event OperatorSet(address indexed op, bool active);
     event EqualizerAccountSet(address indexed eq, bool active);
 
-    constructor(address _guageRegistry, address _userManager) {
+    constructor(address _guageRegistry, address _surrogateRegistry, address _userManager) {
         owner = msg.sender;
         operators[msg.sender] = true;
         gaugeRegistry = _guageRegistry;
+        surrogateRegistry = _surrogateRegistry;
         userManager = _userManager;
     }
 
