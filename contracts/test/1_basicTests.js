@@ -8,6 +8,7 @@ var contractList = jsonfile.readFileSync('./contracts.json');
 const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
 const Delegation = artifacts.require("Delegation");
 const GaugeRegistry = artifacts.require("GaugeRegistry");
+const SurrogateRegistry = artifacts.require("SurrogateRegistry");
 const UpdateUserWeight = artifacts.require("UpdateUserWeight");
 
 // const IERC20 = artifacts.require("IERC20");
@@ -166,14 +167,14 @@ contract("Deploy System and test", async accounts => {
     var userAdjusted = {};
     var userDelegation = {};
     userBase[userA] = 100;
-    userBase[userX] = 200;
-    userBase[userZ] = 300;
+    userBase[userB] = 200;
+    userBase[userC] = 300;
     userAdjusted[userA] = 0;
-    userAdjusted[userX] = userBase[userA];
-    userAdjusted[userZ] = 0;
-    userDelegation[userA] = userX;
-    userDelegation[userX] = userX;
-    userDelegation[userZ] = userZ;
+    userAdjusted[userB] = userBase[userA];
+    userAdjusted[userC] = 0;
+    userDelegation[userA] = userB;
+    userDelegation[userB] = userB;
+    userDelegation[userC] = userC;
 
     tree = await merkle.createTree(userBase, userAdjusted, userDelegation);
     console.log(JSON.stringify(tree, null, 2));
@@ -201,7 +202,10 @@ contract("Deploy System and test", async accounts => {
     var userManager = await UpdateUserWeight.new({from:deployer})
     console.log("user manager: " +userManager.address);
 
-    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, userManager.address, {from:deployer});
+    var surrogateReg = await SurrogateRegistry.new({from:deployer})
+    console.log("surrogateReg: " +surrogateReg.address);
+
+    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, surrogateReg.address, userManager.address, {from:deployer});
     console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
 
     console.log("\n\n --- deployed ----")
@@ -259,21 +263,22 @@ contract("Deploy System and test", async accounts => {
     var _proposalId = 0;
     var _gauges = [gaugeA, gaugeB];
     var _weights = [4000, 6000];
+    var _weightsB = [9000, 1000];
     // var _proofs = tree.users[userA].proof;
     // var _baseWeight = userBase[userA];
     // var _adjustedWeight = userAdjusted[userA];
     // var _delegate = userX;
 
   
-    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, tree.users[userX].proof, userBase[userX], userAdjusted[userX], userDelegation[userX], {from:userX,gasPrice:0});
-    console.log("\nvote user X ("+userX+")");
-    await gaugeVotePlatform.getVote(pcnt-1, userX).then(a=>console.log(JSON.stringify(a)))
+    await gaugeVotePlatform.voteWithProofs(userB, _gauges, _weights, tree.users[userB].proof, userBase[userB], userAdjusted[userB], userDelegation[userB], {from:userB,gasPrice:0});
+    console.log("\nvote user B ("+userB+")");
+    await gaugeVotePlatform.getVote(pcnt-1, userB).then(a=>console.log(JSON.stringify(a)))
 
-    await gaugeVotePlatform.voteWithProofs(_gauges, _weights, tree.users[userA].proof, userBase[userA], userAdjusted[userA], userDelegation[userA], {from:userA});
+    await gaugeVotePlatform.voteWithProofs(userA, _gauges, _weights, tree.users[userA].proof, userBase[userA], userAdjusted[userA], userDelegation[userA], {from:userA});
     console.log("\nvote user A (" +userA +")")
     await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
-    console.log("\ncheck x's delegated weight")
-    await gaugeVotePlatform.getVote(pcnt-1, userX).then(a=>console.log(JSON.stringify(a)))
+    console.log("\ncheck B's delegated weight")
+    await gaugeVotePlatform.getVote(pcnt-1, userB).then(a=>console.log(JSON.stringify(a)))
 
 
     console.log("\nupdate A's weight...");
@@ -281,6 +286,28 @@ contract("Deploy System and test", async accounts => {
     console.log("updated A (update pattern: already voted user update)");
 
     await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
+
+    console.log("\n\ntry vote as surrogate for C from A")
+    await gaugeVotePlatform.voteWithProofs(userC, _gauges, _weights, tree.users[userC].proof, userBase[userC], userAdjusted[userC], userDelegation[userC], {from:userA}).catch(a=>console.log("catch (no surrogate): " +a));
+    await surrogateReg.setSurrogate(userA,{from:userC});
+    console.log("C set A as surrogate");
+    await surrogateReg.isSurrogate(userA, userC).then(a=>console.log("is A surrogate for C? " +a))
+
+    console.log("try vote as surrogate again")
+    await gaugeVotePlatform.voteWithProofs(userC, _gauges, _weights, tree.users[userC].proof, userBase[userC], userAdjusted[userC], userDelegation[userC], {from:userA})
+    console.log("A voted for C, user vote status should be 1");
+    await gaugeVotePlatform.getVote(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
+    await gaugeVotePlatform.userInfo(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
+
+    console.log("let C vote for self...")
+    await gaugeVotePlatform.vote(userC, _gauges, _weightsB, {from:userC});
+    console.log("C voted for self to override surrogate, user vote status should be 2");
+
+    await gaugeVotePlatform.getVote(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
+    await gaugeVotePlatform.userInfo(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
+
+    console.log("try to vote for Z from A again...");
+    await gaugeVotePlatform.vote(userC, _gauges, _weights, {from:userA}).catch(a=>console.log("catch (surrogate cant vote after user votes): " +a))
 
     return;
   });

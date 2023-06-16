@@ -19,12 +19,18 @@ contract GaugeVotePlatform{
     address public immutable surrogateRegistry;
     address public immutable userManager;
 
+    enum VoteStatus{
+        None,
+        VotedViaSurrogate,
+        Voted
+    }
+
     struct UserInfo {
         uint256 baseWeight; //original weight
         int256 adjustedWeight; //signed weight change via delegation change or updated user weight
         uint256 pendingWeight; //weight updated but awaiting proof
         address delegate;
-        bool voted;
+        uint8 voteStatus;
     }
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
     mapping(uint256 => address[]) public votedUsers; // proposalId => votedUsers[]
@@ -67,7 +73,7 @@ contract GaugeVotePlatform{
     function getVote(uint256 _proposalId, address _user) public view returns (address[] memory gauges, uint256[] memory weights, bool voted, uint256 baseWeight, int256 adjustedWeight) {
         gauges = votes[_proposalId][_user].gauges;
         weights = votes[_proposalId][_user].weights;
-        voted = userInfo[_proposalId][_user].voted;
+        voted = userInfo[_proposalId][_user].voteStatus > 0;
         baseWeight = userInfo[_proposalId][_user].baseWeight;
         adjustedWeight = userInfo[_proposalId][_user].adjustedWeight;
     }
@@ -98,8 +104,8 @@ contract GaugeVotePlatform{
         emit VoteCast(proposalId, _account, _gauges, _weights);
 
         //set user with voting flag and add to voter list
-        if(!userInfo[proposalId][_account].voted){
-            userInfo[proposalId][_account].voted = true;
+        if(userInfo[proposalId][_account].voteStatus == 0){
+            userInfo[proposalId][_account].voteStatus = msg.sender == _account ? uint8(VoteStatus.Voted) : uint8(VoteStatus.VotedViaSurrogate);
             votedUsers[proposalId].push(_account);
 
             //since user voted, take weight away from delegate
@@ -115,14 +121,21 @@ contract GaugeVotePlatform{
         if(msg.sender == _account){
             return true;
         }
-        if(ISurrogateRegistry(surrogateRegistry).isSurrogate(_account, msg.sender)){
+        if(ISurrogateRegistry(surrogateRegistry).isSurrogate(msg.sender, _account)){
             return true;
         }
         return false;
     }
 
     function vote(address _account, address[] calldata _gauges, uint256[] calldata _weights) external onlyAcceptedSigner(_account){
+        uint256 proposalId = proposals.length - 1;
+        require(msg.sender == _account || userInfo[proposalId][_account].voteStatus <= uint8(VoteStatus.VotedViaSurrogate), "!voteAuth");
+
         _vote(_account, _gauges, _weights);
+
+        if(userInfo[proposalId][_account].voteStatus <= uint8(VoteStatus.VotedViaSurrogate) && msg.sender == _account){
+            userInfo[proposalId][_account].voteStatus = uint8(VoteStatus.Voted);
+        }
     }
 
     function voteWithProofs(address _account, address[] calldata _gauges, uint256[] calldata _weights, bytes32[] calldata proofs, uint256 _baseWeight, int256 _adjustedWeight, address _delegate) external onlyAcceptedSigner(_account){
@@ -210,7 +223,7 @@ contract GaugeVotePlatform{
         require(block.timestamp <= proposals[_proposalId].endTime, "!end");
 
         //if voted, delegation weight has already been adjusted so just adjust the user's base
-        if(userInfo[_proposalId][_user].voted){
+        if(userInfo[_proposalId][_user].voteStatus > 0){
             userInfo[_proposalId][_user].baseWeight = _newWeight;
 
             emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
