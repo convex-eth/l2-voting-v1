@@ -207,6 +207,9 @@ contract GaugeVotePlatform{
 
     function forceEndProposal() public onlyOperator {
         uint256 proposalId = proposals.length - 1;
+        require(block.timestamp >= proposals[proposalId].startTime, "!start");
+        require(block.timestamp <= proposals[proposalId].endTime, "!end");
+        
         proposals[proposalId].baseWeightMerkleRoot = 0;
         proposals[proposalId].startTime = 0;
         proposals[proposalId].endTime = 0;

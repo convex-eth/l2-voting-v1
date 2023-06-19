@@ -37,7 +37,8 @@ date = new Date(newEpoch*1000);
 day = date.getDate();
 month = date.toLocaleString('default', { month: 'short' });
 year = date.getFullYear();
-const epochString = "Week of "+day+" "+month+" "+year;
+// const epochString = "Week of "+day+" "+month+" "+year;
+const epochString = "proofs_" +year +"_" +date.getMonth() +"_" +day;
 
 module.exports = {
     getUsers: async function (target_block, fullsync=false) {
