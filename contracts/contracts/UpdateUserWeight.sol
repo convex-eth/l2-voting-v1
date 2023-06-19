@@ -65,7 +65,7 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
     }
 
     function updateWeight(address _voteplatform, address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) public {
-        require(msg.sender == address(this),"!self");
+        require(msg.sender == address(this) || msg.sender == owner,"!self");
         require(_epoch == currentEpoch(), "!epoch");
 
         //update voting platform's user weight for the specified proposal id

@@ -2,33 +2,31 @@
 pragma solidity ^0.8.10;
 
 import "./interfaces/IBridgeMessageReceiver.sol";
-import "./interfaces/IVotePlatform.sol";
+import "./interfaces/ISurrogateRegistry.sol";
 
-contract GaugeRegistry is IBridgeMessageReceiver {
+contract SurrogateRegistry is IBridgeMessageReceiver, ISurrogateRegistry {
 
     address public owner;
     address public pendingowner;
     address public operator;
     address public bridge;
 
-    uint256 public constant epochDuration = 86400 * 7;
+    struct Info {
+        address surrogate; //address set to allow to vote on a user's behalf
+        uint256 timestamp; //timestamp this info was updated
+    }
+
+    mapping(address => Info) public surrogateInfo; 
 
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address _op);
     event BridgeSet(address _bridge);
-    event SetGauge(address _gauge, bool _active);
-
-    mapping(address => uint256) public activeGaugeIndex;
-    address[] public activeGauges;
+    event SurrogateSet(address _account, address _surrogate);
 
     constructor() {
         owner = msg.sender;
         bridge = address(0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe);
-    }
-
-    function currentEpoch() public view returns (uint256) {
-        return block.timestamp/epochDuration*epochDuration;
     }
 
     function transferOwnership(address _owner) external onlyOwner{
@@ -58,8 +56,14 @@ contract GaugeRegistry is IBridgeMessageReceiver {
         _;
     }
 
-    function gaugeLength() external view returns (uint256){
-        return activeGauges.length;
+    function isSurrogate(address _surrogate, address _account) external view returns(bool){
+        return surrogateInfo[_account].surrogate == _surrogate;
+    }
+
+    function setSurrogate(address _surrogate) external{
+        surrogateInfo[msg.sender].surrogate = _surrogate;
+        surrogateInfo[msg.sender].timestamp = block.timestamp;
+        emit SurrogateSet(msg.sender, _surrogate);
     }
 
     function onMessageReceived(address originAddress, uint32 originNetwork, bytes calldata data) external payable {
@@ -72,27 +76,12 @@ contract GaugeRegistry is IBridgeMessageReceiver {
         }
     }
 
-    function setGauge(address _gauge, bool _isActive, uint256 _epoch) public{
-        require(msg.sender == address(this) || msg.sender == owner,"!op");
-        require(_epoch == currentEpoch(), "!epoch"); //disallow old messages
+    function updateWeight(address _user, address _surrogate, uint256 _timestamp) public {
+        require(msg.sender == address(this) || msg.sender == owner,"!self");
+        require(_timestamp > surrogateInfo[_user].timestamp , "!time");
 
-        uint256 index = activeGaugeIndex[_gauge];
-        if(index > 0){
-            if(!_isActive){
-                //remove from list
-                activeGauges[index-1] = activeGauges[activeGauges.length-1];
-                activeGauges.pop();
-                activeGaugeIndex[_gauge] = 0;
-            }
-        }else{
-            activeGauges.push(_gauge);
-            activeGaugeIndex[_gauge] = activeGauges.length; //index is +1 since we use 0 to mark as unregistered
-        }
-
-        emit SetGauge(_gauge, _isActive);
-    }
-
-    function isGauge(address _gauge) external view returns(bool){
-        return activeGaugeIndex[_gauge] > 0;
+        surrogateInfo[_user].surrogate = _surrogate;
+        surrogateInfo[_user].timestamp = _timestamp;
+        emit SurrogateSet(_user, _surrogate);
     }
 }
