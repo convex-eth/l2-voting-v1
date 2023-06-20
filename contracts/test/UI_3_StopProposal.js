@@ -152,7 +152,7 @@ contract("Deploy System and test", async accounts => {
     console.log("\n\n >>>> Begin Tests >>>>")
 
     //system
-    var tree = jsonfile.readFileSync('./proofs_2023_5_15.json');
+    var tree = jsonfile.readFileSync('./proofs_2023_6_15.json');
 
     var gaugeVotePlatform = await GaugeVotePlatform.at(chainContracts.system.gaugeVotePlatform);
     console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)

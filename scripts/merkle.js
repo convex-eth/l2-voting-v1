@@ -32,13 +32,11 @@ process.env.LANG = 'en_US.UTF-8';
 
 const newEpoch = Math.floor(Date.now()/1000/(86400*7))*86400*7;
 
-// format timestamp as "Week of 8th Jun 2023"
 date = new Date(newEpoch*1000);
 day = date.getDate();
-month = date.toLocaleString('default', { month: 'short' });
+month = date.getMonth()+1;
 year = date.getFullYear();
-// const epochString = "Week of "+day+" "+month+" "+year;
-const epochString = "proofs_" +year +"_" +date.getMonth() +"_" +day;
+const epochString = "proofs_" +year +"_" +month+"_" +day;
 
 module.exports = {
     getUsers: async function (target_block, fullsync=false) {

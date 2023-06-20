@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-import "./interfaces/IZkEvmBridge.sol";import "./interfaces/IvlCVX.sol";
+import "./interfaces/IZkEvmBridge.sol";
+import "./interfaces/IvlCVX.sol";
 
 contract CommitUserWeight {
 
