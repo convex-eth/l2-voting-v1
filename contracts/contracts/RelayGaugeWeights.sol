@@ -6,7 +6,7 @@ import "./interfaces/IZkEvmBridge.sol";
 import "./interfaces/IVotePlatform.sol";
 import "./interfaces/IGaugeRegistry.sol";
 
-contract CommitGaugeWeights {
+contract RelayGaugeWeights {
 
     address public owner;
     address public pendingowner;
@@ -98,7 +98,7 @@ contract CommitGaugeWeights {
                 totalWeight += gaugeTotal;
             }
         }
-        
+
         // add gauges that increased in weight
         uint256 gaugeLength = votePlatform.gaugesWithVotesCount(_proposalId);
         for(uint256 i = 0; i < gaugeLength; i++){
