@@ -35,6 +35,9 @@ contract GaugeVotePlatform{
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
     mapping(uint256 => address[]) public votedUsers; // proposalId => votedUsers[]
 
+    mapping(uint256 => mapping(address => uint256)) public gaugesWithVotesIndex; // proposalId => gauge => index
+    mapping(uint256 => address[]) public gaugesWithVotes;  // proposalId => [gauges with votes]
+
     struct Proposal {
         bytes32 baseWeightMerkleRoot; //merkle root to provide user base weights 
         uint256 startTime; //start timestamp
@@ -57,6 +60,10 @@ contract GaugeVotePlatform{
 
     function proposalCount() external view returns(uint256){
         return proposals.length;
+    }
+
+    function gaugesWithVotesCount(uint256 _proposalId) external view returns(uint256){
+        return gaugesWithVotes[_proposalId].length;
     }
 
     function getVoterCount(uint256 _proposalId) external view returns(uint256){
@@ -95,6 +102,11 @@ contract GaugeVotePlatform{
         if(userInfo[proposalId][_account].voteStatus > 0){
             for(uint256 i = 0; i < votes[proposalId][_account].gauges.length; i++) {
                 gaugeTotals[proposalId][votes[proposalId][_account].gauges[i]] -= uint256(int256(_weights[i])*(int256(userInfo[proposalId][_account].baseWeight)+userInfo[proposalId][_account].adjustedWeight)/int256(max_weight));
+                if(gaugeTotals[proposalId][votes[proposalId][_account].gauges[i]] == 0) {
+                    gaugesWithVotes[proposalId][gaugesWithVotesIndex[proposalId][votes[proposalId][_account].gauges[i]]] = gaugesWithVotes[proposalId][gaugesWithVotes[proposalId].length-1];
+                    gaugesWithVotesIndex[proposalId][gaugesWithVotes[proposalId][gaugesWithVotes[proposalId].length-1]] = gaugesWithVotesIndex[proposalId][votes[proposalId][_account].gauges[i]];
+                    gaugesWithVotes[proposalId].pop();
+                }
             }
         }
         //update user vote
@@ -112,6 +124,12 @@ contract GaugeVotePlatform{
         //update gauge totals
         for(uint256 i = 0; i < _weights.length; i++) {
             gaugeTotals[proposalId][_gauges[i]] += uint256(int256(_weights[i])*(int256(userInfo[proposalId][_account].baseWeight)+userInfo[proposalId][_account].adjustedWeight)/int256(max_weight));
+            if(gaugeTotals[proposalId][_gauges[i]] > 0) {
+                if(gaugesWithVotesIndex[proposalId][_gauges[i]] == 0) {
+                    gaugesWithVotes[proposalId].push(_gauges[i]);
+                    gaugesWithVotesIndex[proposalId][_gauges[i]] = gaugesWithVotes[proposalId].length;
+                }
+            }
         }
         emit VoteCast(proposalId, _account, _gauges, _weights);
 
@@ -158,6 +176,11 @@ contract GaugeVotePlatform{
         if(userInfo[proposalId][_delegate].voteStatus > 0){
             for(uint256 i = 0; i < votes[proposalId][_delegate].gauges.length; i++) {
                 gaugeTotals[proposalId][votes[proposalId][_delegate].gauges[i]] -= votes[proposalId][_delegate].weights[i]*userInfo[proposalId][_account].baseWeight/max_weight;
+                if(gaugeTotals[proposalId][votes[proposalId][_delegate].gauges[i]] == 0) {
+                    gaugesWithVotes[proposalId][gaugesWithVotesIndex[proposalId][votes[proposalId][_delegate].gauges[i]]] = gaugesWithVotes[proposalId][gaugesWithVotes[proposalId].length-1];
+                    gaugesWithVotesIndex[proposalId][gaugesWithVotes[proposalId][gaugesWithVotes[proposalId].length-1]] = gaugesWithVotesIndex[proposalId][votes[proposalId][_delegate].gauges[i]];
+                    gaugesWithVotes[proposalId].pop();
+                }
             }
         }
         _vote(_account, _gauges, _weights);
