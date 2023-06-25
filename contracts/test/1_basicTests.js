@@ -284,8 +284,8 @@ contract("Deploy System and test", async accounts => {
     // var _delegate = userX;
 
   
-    await gaugeVotePlatform.voteWithProofs(userB, _gauges, _weights, tree.users[userB].proof, userBase[userB], userAdjusted[userB], userDelegation[userB], {from:userB,gasPrice:0});
-    console.log("\nvote user B ("+userB+")");
+    var tx = await gaugeVotePlatform.voteWithProofs(userB, _gauges, _weights, tree.users[userB].proof, userBase[userB], userAdjusted[userB], userDelegation[userB], {from:userB,gasPrice:0});
+    console.log("\nvote user B ("+userB+"), gas: " +tx.receipt.gasUsed);
     await gaugeVotePlatform.getVote(pcnt-1, userB).then(a=>console.log(JSON.stringify(a)))
 
     const showVotedGauges = async (_proposalId) => {
@@ -300,11 +300,10 @@ contract("Deploy System and test", async accounts => {
       }
       console.log("--------\n");
     }
-    
     await showVotedGauges(pcnt-1);
 
-    await gaugeVotePlatform.voteWithProofs(userA, _gauges, _weights, tree.users[userA].proof, userBase[userA], userAdjusted[userA], userDelegation[userA], {from:userA});
-    console.log("\nvote user A (" +userA +")")
+    var tx = await gaugeVotePlatform.voteWithProofs(userA, _gauges, _weights, tree.users[userA].proof, userBase[userA], userAdjusted[userA], userDelegation[userA], {from:userA});
+    console.log("\nvote user A (" +userA +"), gas: " +tx.receipt.gasUsed)
     await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
     console.log("\ncheck B's delegated weight")
     await gaugeVotePlatform.getVote(pcnt-1, userB).then(a=>console.log(JSON.stringify(a)))
@@ -324,15 +323,15 @@ contract("Deploy System and test", async accounts => {
     await surrogateReg.isSurrogate(userA, userC).then(a=>console.log("is A surrogate for C? " +a))
 
     console.log("try vote as surrogate again")
-    await gaugeVotePlatform.voteWithProofs(userC, _gauges, _weights, tree.users[userC].proof, userBase[userC], userAdjusted[userC], userDelegation[userC], {from:userA})
-    console.log("A voted for C, user vote status should be 1");
+    var tx = await gaugeVotePlatform.voteWithProofs(userC, _gauges, _weights, tree.users[userC].proof, userBase[userC], userAdjusted[userC], userDelegation[userC], {from:userA})
+    console.log("A voted for C, user vote status should be 1, gas: " +tx.receipt.gasUsed);
     await gaugeVotePlatform.getVote(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
     await gaugeVotePlatform.userInfo(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
     await showVotedGauges(pcnt-1);
 
     console.log("let C vote for self...")
-    await gaugeVotePlatform.vote(userC, _gaugesB, _weightsB, {from:userC});
-    console.log("C voted for self to override surrogate, user vote status should be 2");
+    var tx = await gaugeVotePlatform.vote(userC, _gaugesB, _weightsB, {from:userC});
+    console.log("C voted for self to override surrogate, user vote status should be 2, gas: " +tx.receipt.gasUsed);
 
     await gaugeVotePlatform.getVote(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
     await gaugeVotePlatform.userInfo(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
@@ -343,13 +342,17 @@ contract("Deploy System and test", async accounts => {
 
 
     console.log("vote with A on different gauge")
-    await gaugeVotePlatform.vote(userA, _gaugesC, _weightsC, {from:userA})
+    var tx = await gaugeVotePlatform.vote(userA, _gaugesC, _weightsC, {from:userA})
+    console.log("voted, gas: " +tx.receipt.gasUsed);
     await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
     await showVotedGauges(pcnt-1);
 
-    console.log("move vote of A back to gaugeA, removing D from list..")
-    await gaugeVotePlatform.vote(userA, [gaugeA], [10000], {from:userA})
+    console.log("move vote of A gauge D, removing C from list..")
+    var tx = await gaugeVotePlatform.vote(userA, [gaugeD], [10000], {from:userA})
+    console.log("voted, gas: " +tx.receipt.gasUsed);
     await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
+    var tx = await gaugeVotePlatform.vote(userC,  [gaugeD], [10000], {from:userC});
+    await gaugeVotePlatform.getVote(pcnt-1, userC).then(a=>console.log(JSON.stringify(a)))
     await showVotedGauges(pcnt-1);
 
     return;
