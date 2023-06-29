@@ -3,8 +3,10 @@
         "system": {
             "deployer": "0x748765B8C7d0d40DC6B908c5A95f37605f037a15",
             "multisig": "0xa3C5A1e09150B75ff251c1a7815A07182c3de2FB",
+            "booster": "0xF403C135812408BFbE8713b5A23a04b3D48AAE31",
             "zkevmBridge": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
-            "gaugeCommit": "0x33d04dC091D5fD77b99083a0430A3CD7351C8401"
+            "commitGaugeStatus": "0xe07b8FA0D41800ff5Ef828080c4ED7837495fEd7",
+            "commitUserWeight": "0xF68d8aA6A91E65198e7aFA10ca70910129aE792E"
         }
     },
     "zkevm": {
