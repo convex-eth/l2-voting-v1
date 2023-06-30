@@ -141,28 +141,6 @@ contract("Deploy System and test", async accounts => {
     userNames[userD] = "D";
     userNames[userZ] = "Z";
 
-    // merkle data
-    var userBase = {};
-    var userAdjusted = {};
-    var userDelegation = {};
-    userBase[userA] = 100;
-    userBase[userB] = 200;
-    userBase[userC] = 300;
-    userBase[userD] = 500;
-    userBase[userE] = 0;
-    userAdjusted[userA] = 0;
-    userAdjusted[userB] = userBase[userA];
-    userAdjusted[userC] = 0;
-    userAdjusted[userD] = 0;
-    userAdjusted[userE] = userBase[userD];
-    userDelegation[userA] = userB;
-    userDelegation[userB] = userB;
-    userDelegation[userC] = userC;
-    userDelegation[userD] = userE;
-    userDelegation[userE] = userE;
-
-    tree = await merkle.createTree(userBase, userAdjusted, userDelegation);
-    console.log(JSON.stringify(tree, null, 2));
 
     let chainContracts = getChainContracts();
     let deployer = chainContracts.system.deployer;
@@ -173,39 +151,16 @@ contract("Deploy System and test", async accounts => {
 
     console.log("\n\n >>>> Begin Tests >>>>")
 
-    //system
-    var gaugeReg = await GaugeRegistry.new({from:deployer});
-    console.log("gaugeReg: " +gaugeReg.address);
-    await gaugeReg.setOperator(contractList.mainnet.system.commitGaugeStatus,{from:deployer});
-    console.log("set operator on gauge reg");
+    var userManager = await UpdateUserWeight.at(chainContracts.system.userWeightManager);
+    console.log("userManager: " +userManager.address)
 
-    var userManager = await UpdateUserWeight.new({from:deployer})
-    console.log("user manager: " +userManager.address);
+    var gaugeVotePlatform = await GaugeVotePlatform.at(chainContracts.system.gaugeVotePlatform);
+    var pCnt = Number(await gaugeVotePlatform.proposalCount());
+    var epoch = await userManager.currentEpoch();
 
-    var surrogateReg = await SurrogateRegistry.new({from:deployer})
-    console.log("surrogateReg: " +surrogateReg.address);
+    var newWeight = 5000;
 
-    var gaugeVotePlatform = await GaugeVotePlatform.new(gaugeReg.address, surrogateReg.address, userManager.address, {from:deployer});
-    console.log("gaugeVotePlatform: " +gaugeVotePlatform.address)
-
-    chainContracts.system.gaugeRegistry= gaugeReg.address;
-    chainContracts.system.surrogateRegistry = surrogateReg.address;
-    chainContracts.system.userWeightManager = userManager.address;
-    chainContracts.system.gaugeVotePlatform = gaugeVotePlatform.address;
-    jsonfile.writeFileSync("./contracts.json", contractList, { spaces: 4 });
-
-    //fill some gauges
-    var gaugeA = "0xfb18127c1471131468a1aad4785c19678e521d86";
-    var gaugeB = "0x2932a86df44fe8d2a706d8e9c5d51c24883423f5";
-    var gaugeC = "0xcfc25170633581bf896cb6cdee170e3e3aa59503";
-    var gaugeD = "0x66915f81deafcfba171aeaa914c76a607437dd4a";
-    var currentEpoch = await gaugeReg.currentEpoch();
-    await gaugeReg.setGauge(gaugeA,true,currentEpoch,{from:deployer});
-    await gaugeReg.setGauge(gaugeB,true,currentEpoch,{from:deployer});
-    await gaugeReg.setGauge(gaugeC,true,currentEpoch,{from:deployer});
-    await gaugeReg.setGauge(gaugeD,true,currentEpoch,{from:deployer});
-
-    console.log("\n\n --- deployed ----")
+    await userManager.updateWeight(chainContracts.system.gaugeVotePlatform, userA, epoch, pCnt-1, newWeight, {from:deployer});
 
     return;
   });
