@@ -203,7 +203,7 @@ contract("Deploy System and test", async accounts => {
 
     var gaugeReg = await GaugeRegistry.new({from:deployer});
     console.log("gaugeReg: " +gaugeReg.address);
-    await gaugeReg.setOperator(contractList.mainnet.system.gaugeCommit,{from:deployer});
+    await gaugeReg.setOperator(contractList.mainnet.system.commitGaugeStatus,{from:deployer});
     console.log("set operator on gauge reg");
 
     var userManager = await UpdateUserWeight.new({from:deployer})

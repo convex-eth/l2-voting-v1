@@ -7,6 +7,7 @@ var contractList = jsonfile.readFileSync('./contracts.json');
 
 const CommitGaugeStatus = artifacts.require("CommitGaugeStatus");
 const CommitUserWeight = artifacts.require("CommitUserWeight");
+const CommitUserSurrogate = artifacts.require("CommitUserSurrogate");
 
 
 const addAccount = async (address) => {
@@ -150,11 +151,14 @@ contract("Deploy System and test", async accounts => {
     //system
     var commitGauge = await CommitGaugeStatus.new({from:deployer});
     var commitUser = await CommitUserWeight.new({from:deployer});
+    var commitSurrogate = await CommitUserSurrogate.new({from:deployer});
     console.log("commitGauge: " +commitGauge.address);
     console.log("commitUser: " +commitUser.address);
+    console.log("commitUserSurrogate: " +commitSurrogate.address);
 
     chainContracts.system.commitGaugeStatus= commitGauge.address;
     chainContracts.system.commitUserWeight = commitUser.address;
+    chainContracts.system.commitUserSurrogate = commitSurrogate.address;
     jsonfile.writeFileSync("./contracts.json", contractList, { spaces: 4 });
 
 
