@@ -24,6 +24,11 @@ To circumvent this for gauge proposals, we used a voting weight for each user of
 With this new system, users will have their voting weight assigned from the start of the proposal. However if a user relocks an expired lock, they will now be able to send an on chain transaction on L1 which will bridge to L2 and update their voting weight for the given proposal.
 
 
+### Add new eligible Gauges after proposal has started
+
+Sometimes a new gauge may have been added to the Curve Gauge Controller just after a proposal has begun. Even though voting is still live and the gauge is eligible, because the old system is based on a specific block height the gauge could not be voted for.  Now gauges can be added to a gauge registry on L2 at any time, allowing voters to apply weight to newly added gauges.
+
+
 ## Proposal Process
 
 ### Creation
