@@ -76,7 +76,7 @@ contract SurrogateRegistry is IBridgeMessageReceiver, ISurrogateRegistry {
         }
     }
 
-    function updateWeight(address _user, address _surrogate, uint256 _timestamp) public {
+    function updateUserSurrogate(address _user, address _surrogate, uint256 _timestamp) public {
         require(msg.sender == address(this) || msg.sender == owner,"!self");
         require(_timestamp > surrogateInfo[_user].timestamp , "!time");
 
