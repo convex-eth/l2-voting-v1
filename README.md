@@ -7,7 +7,7 @@ Convex voting platform designed to run on an L2 for cheaper interactions.  This 
 
 ### On Chain
 
-Voting will be performed on-chain. This means that as the cost of spending gas for transactions, voting is verifiable and executable directly with contracts thus no web2 system that will bottle neck the system.  If a UI is unavailable, direct interaction is always a choice. 
+Voting will be performed on-chain. This means that at the cost of spending gas for transactions, voting is verifiable and executable directly with contracts thus no web2 system that will bottle neck the voting process.  If a UI is unavailable, direct interaction is always a choice. On chain voting is also important to create a permissionless and trustless system, which will be the goal of a following v2 system.
 
 ### Surrogate system
 
