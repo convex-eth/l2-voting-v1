@@ -5,7 +5,10 @@ const { assert } = require('chai');
 const merkle = require('../../scripts/merkle');
 var contractList = jsonfile.readFileSync('./contracts.json');
 
-const IBooster = artifacts.require("IBooster");
+const GaugeVotePlatform = artifacts.require("GaugeVotePlatform");
+const GaugeRegistry = artifacts.require("GaugeRegistry");
+const SurrogateRegistry = artifacts.require("SurrogateRegistry");
+const UpdateUserWeight = artifacts.require("UpdateUserWeight");
 
 
 const addAccount = async (address) => {
@@ -142,29 +145,31 @@ contract("Deploy System and test", async accounts => {
     let multisig = chainContracts.system.multisig;
    
     console.log("deployer: " +deployer);
-    await unlockAccount(deployer);
+    // await unlockAccount(deployer);
 
     console.log("\n\n >>>> Begin Tests >>>>")
 
-    let booster = await IBooster.at(chainContracts.system.booster);
+    //system
+    var gaugeReg = await GaugeRegistry.at(chainContracts.system.gaugeRegistry);
+    console.log("gaugeReg: " +gaugeReg.address);
 
-    var poolCnt = await booster.poolLength();
-    var gauges = [];
-    for(var i = 0; i < poolCnt; i++){
-      var pinfo = await booster.poolInfo(i);
-      // console.log(JSON.stringify(pinfo));
-      if(pinfo._shutdown == false && pinfo._gauge.toLowerCase() != "0xB15fFb543211b558D40160811e5DcBcd7d5aaac9".toLowerCase() ){
-        console.log("add pool " +i +" to list gauges")
-        gauges.push(pinfo._gauge);
+    var gaugeList = jsonfile.readFileSync('./gauge_list.json');
+    gaugeList = gaugeList.gauges;
+    var epoch = await gaugeReg.currentEpoch();
+    console.log("current epoch: " +epoch);
+    var addedGaugeCnt = 0;
+    for(var i = 0; i < gaugeList.length; i++){
+      var isactive = await gaugeReg.isGauge(gaugeList[i]);
+      if(isactive){
+        console.log("skip gauge " +i +": " +gaugeList[i]);
+      }else{
+        console.log("add gauge: " +gaugeList[i]);
+        await gaugeReg.setGauge(gaugeList[i],true,epoch,{from:deployer});
+        addedGaugeCnt++;
       }
     }
-
-    console.log("gauges: " +gauges);
-
-    var data = {}
-    data.gauges = gauges;
-
-    jsonfile.writeFileSync("./gauge_list.json", data, { spaces: 4 });
+    console.log("added gauges: " +addedGaugeCnt);
+    await gaugeReg.gaugeLength().then(a=>console.log("\n\nregistered gauges: " +a));
 
     return;
   });
