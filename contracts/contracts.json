@@ -15,7 +15,10 @@
             "deployer": "0x748765B8C7d0d40DC6B908c5A95f37605f037a15",
             "multisig": "0x6111ABF720051309012FcdBc2910054E41dcFF8c",
             "zkevmBridge": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
-            "gaugeRegistry": "0xfe8c5641Fb7B816E29F85aCAEC168264979fF8bC"
+            "gaugeRegistry": "0x028E06305e63db21D792346b136323863993cfAd",
+            "surrogateRegistry": "0x8E42b11Ba9458592816B44896CE3fd40eEc0B2Bf",
+            "userWeightManager": "0x2D0eD4915195090F88B4cF6Dd8bAeD8b276517d7",
+            "gaugeVotePlatform": "0x85917b2A1aEC540d16d4F880C85abe760F29789a"
         }
     }
 }

@@ -145,7 +145,7 @@ contract("Deploy System and test", async accounts => {
     let multisig = chainContracts.system.multisig;
    
     console.log("deployer: " +deployer);
-    await unlockAccount(deployer);
+    // await unlockAccount(deployer);
 
     console.log("\n\n >>>> Begin Tests >>>>")
 
@@ -192,8 +192,13 @@ contract("Deploy System and test", async accounts => {
     gaugeList = gaugeList.gauges;
     var epoch = await gaugeReg.currentEpoch();
     for(var i = 0; i < gaugeList.length; i++){
-      console.log("add gauge: " +gaugeList[i]);
-      await gaugeReg.setGauge(gaugeList[i],true,epoch,{from:deployer});
+      var isactive = await gaugeReg.isGauge(gaugeList[i]);
+      if(isactive){
+        console.log("skip gauge " +i +": " +gaugeList[i]);
+      }else{
+        console.log("add gauge: " +gaugeList[i]);
+        await gaugeReg.setGauge(gaugeList[i],true,epoch,{from:deployer});
+      }
     }
     await gaugeReg.gaugeLength().then(a=>console.log("\n\nregistered gauges: " +a));
 
