@@ -98,10 +98,13 @@ contract GaugeVotePlatform{
         require(_gauges.length == _weights.length, "mismatch");
         require(userInfo[proposalId][_account].delegate != address(0), "!proof");
 
+        //get total user weight
+        int256 userWeight = int256(userInfo[proposalId][_account].baseWeight)+userInfo[proposalId][_account].adjustedWeight;
+
         //remove from gauge totals
         if(userInfo[proposalId][_account].voteStatus > 0){
             for(uint256 i = 0; i < votes[proposalId][_account].gauges.length; i++) {
-                _changeGaugeTotal(proposalId, votes[proposalId][_account].gauges[i], -(int256(votes[proposalId][_account].weights[i])*(int256(userInfo[proposalId][_account].baseWeight)+userInfo[proposalId][_account].adjustedWeight)/int256(max_weight)) );
+                _changeGaugeTotal(proposalId, votes[proposalId][_account].gauges[i], -(int256(votes[proposalId][_account].weights[i])*(userWeight/int256(max_weight))) );
             }
         }
 
@@ -118,11 +121,9 @@ contract GaugeVotePlatform{
         }
         require(totalweight <= max_weight, "max weight");
 
-        uint256 userbase = userInfo[proposalId][_account].baseWeight;
-        int256 useradjusted = userInfo[proposalId][_account].adjustedWeight;
         //update gauge totals
         for(uint256 i = 0; i < _weights.length; i++) {
-            _changeGaugeTotal(proposalId,_gauges[i], int256(_weights[i])*(int256(userbase)+useradjusted)/int256(max_weight) );
+            _changeGaugeTotal(proposalId,_gauges[i], int256(_weights[i])*(userWeight/int256(max_weight)) );
         }
         emit VoteCast(proposalId, _account, _gauges, _weights);
 
@@ -134,22 +135,21 @@ contract GaugeVotePlatform{
             //since user voted, take weight away from delegate
             address delegate = userInfo[proposalId][_account].delegate;
             if(delegate != _account) {
+                int256 userbase = int256(userInfo[proposalId][_account].baseWeight);
 
                 //if delegate already voted, update global gauge totals
                 if(userInfo[proposalId][delegate].voteStatus > 0){
-                    uint256 delegatebase = userInfo[proposalId][delegate].baseWeight;
-                    int256 delegateadjusted = userInfo[proposalId][delegate].adjustedWeight;
-
+                    int256 delegateweight = int256(userInfo[proposalId][delegate].baseWeight) + userInfo[proposalId][delegate].adjustedWeight;
                     //remove from gauge totals
                     for(uint256 i = 0; i < votes[proposalId][delegate].gauges.length; i++) {
-                        int256 difference = int256(votes[proposalId][delegate].weights[i])*(int256(delegatebase)+delegateadjusted-int256(userbase))/int256(max_weight);
-                        difference -= int256(votes[proposalId][delegate].weights[i])*(int256(delegatebase)+delegateadjusted)/int256(max_weight);
+                        int256 difference = int256(votes[proposalId][delegate].weights[i])*(delegateweight-userbase)/int256(max_weight);
+                        difference -= int256(votes[proposalId][delegate].weights[i])*delegateweight/int256(max_weight);
                         _changeGaugeTotal(proposalId,votes[proposalId][delegate].gauges[i],difference);
                     }
                 }
 
                 //update delegate adjusted weight
-                userInfo[proposalId][delegate].adjustedWeight -= int256(userInfo[proposalId][_account].baseWeight);
+                userInfo[proposalId][delegate].adjustedWeight -= userbase;
                 emit UserWeightChange(proposalId, delegate,  userInfo[proposalId][delegate].baseWeight,  userInfo[proposalId][delegate].adjustedWeight);
                 
             }
@@ -240,12 +240,11 @@ contract GaugeVotePlatform{
                 // check if delegate has voted
                 if(userInfo[_proposalId][_delegate].voteStatus > 0) {
                     // remove original weight from gauge totals
-                    uint256 delegatebase = userInfo[_proposalId][_delegate].baseWeight;
-                    int256 delegateadjusted = userInfo[_proposalId][_delegate].adjustedWeight;
+                    int256 delegateweight = int256(userInfo[_proposalId][_delegate].baseWeight) + userInfo[_proposalId][_delegate].adjustedWeight;
                     for(uint256 i = 0; i < votes[_proposalId][_delegate].gauges.length; i++) {
                         //get difference in weight
-                        int256 difference = int256(votes[_proposalId][_delegate].weights[i])*(int256(delegatebase)+delegateadjusted+adjustedDifference)/int256(max_weight);
-                        difference -= int256(votes[_proposalId][_delegate].weights[i])*(int256(delegatebase)+delegateadjusted)/int256(max_weight);
+                        int256 difference = int256(votes[_proposalId][_delegate].weights[i])*(delegateweight+adjustedDifference)/int256(max_weight);
+                        difference -= int256(votes[_proposalId][_delegate].weights[i])*delegateweight/int256(max_weight);
                         //change gauge totals
                         _changeGaugeTotal(_proposalId, votes[_proposalId][_delegate].gauges[i], difference );
                     }
@@ -310,7 +309,7 @@ contract GaugeVotePlatform{
         if(userInfo[_proposalId][_user].voteStatus > 0){
             // adjust gauge totals
             uint256 userbase = userInfo[_proposalId][_user].baseWeight;
-            int256 useradjusted = userInfo[_proposalId][_user].adjustedWeight;
+            int256 useradjusted = int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight;
             for(uint256 i = 0; i < votes[_proposalId][_user].gauges.length; i++) {
                 //change gauge total by difference
                 int256 difference = int256(votes[_proposalId][_user].weights[i])*(int256(_newWeight)+useradjusted)/int256(max_weight);
@@ -331,12 +330,11 @@ contract GaugeVotePlatform{
                 // check if delegate has voted
                 if(userInfo[_proposalId][delegate].voteStatus > 0) {
                     // remove original weight from gauge totals
-                    uint256 delegatebase = userInfo[_proposalId][delegate].baseWeight;
-                    int256 delegateadjusted = userInfo[_proposalId][delegate].adjustedWeight;
+                    int256 delegateweight = int256(userInfo[_proposalId][delegate].baseWeight) + userInfo[_proposalId][delegate].adjustedWeight;
                     for(uint256 i = 0; i < votes[_proposalId][delegate].gauges.length; i++) {
                         //change gauge total by difference
-                        int256 difference = int256(votes[_proposalId][delegate].weights[i])*(int256(delegatebase)+delegateadjusted+adjustedDifference)/int256(max_weight);
-                        difference -= int256(votes[_proposalId][delegate].weights[i])*(int256(delegatebase)+delegateadjusted)/int256(max_weight);
+                        int256 difference = int256(votes[_proposalId][delegate].weights[i])*(delegateweight+adjustedDifference)/int256(max_weight);
+                        difference -= int256(votes[_proposalId][delegate].weights[i])*delegateweight/int256(max_weight);
                         _changeGaugeTotal(_proposalId, votes[_proposalId][delegate].gauges[i], difference);
                     }
                 }
