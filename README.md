@@ -62,3 +62,27 @@ As mentioned above, a user may update their weight if there is discrepancy from 
 ### Mainnet Result Submission
 
 After the conclusion of the proposal, off chain scripts will compute the final vote outcome for each gauge and the Convex multsig will submit the transaction on mainnet.
+
+
+## Gas Considerations
+
+### Total Gauge Votes
+
+Currently when casting a vote, gauges totals are being summed and written to a gaugeTotals mappings. To do this it must make a write for each gauge a user wants to vote for AS WELL AS remove gauge totals from the user's delegate if one exists (first time vote only).
+
+It would be a lot cheaper gas wise to only record the user's 0 to 10,000 weighting for each gauge and calculate the final gauge tally on an outside contract or off chain scripts.
+
+However currently we dont have a complete solution that we consider adequate for integrators and UI to dynamically tally votes on demand, as well as a proper on chain finalization that would be required in a v2.
+
+More work can be done in this area to look for an elegant solution, whether that's outside contracts or rewritting how data is stored.
+
+
+### Voted Gauge Array
+
+There is currently an array gaugesWithVotes that contains all gauges that currently have weight.  This condensed list idea was to be used to pass the final result for on chain processing in v2. It could be possible to have another contract process and create this reduced gauge list after the conclusion of a voting period by iterating over all gauge choices and looking up if there is positive weight.
+
+Gas wise though, this mostly only adds gas cost to gauges that have not been voted for before or when weight is removed and the gauge is zeroed out.  Thus this cost doesnt apply to all vote transactions.
+
+
+
+
