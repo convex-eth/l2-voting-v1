@@ -326,6 +326,7 @@ contract GaugeVotePlatform{
         }else{
             //if no proof supplied yet, save to a pending weight. supply proofs to apply
             userInfo[_proposalId][_user].pendingWeight = _newWeight;
+            emit UserWeightPending(_proposalId, _user, _newWeight);
         }
     }
 
@@ -376,6 +377,7 @@ contract GaugeVotePlatform{
     event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
     event ForceEndProposal(uint256 indexed id);
     event UserWeightChange(uint256 indexed pid, address indexed user, uint256 baseWeight, int256 adjustedWeight);
+    event UserWeightPending(uint256 indexed pid, address indexed user, uint256 pendingWeight);
     event GaugeTotalChange(uint256 indexed pid, address indexed gauge, uint256 newWeight);
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
