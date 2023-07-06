@@ -35,9 +35,6 @@ contract GaugeVotePlatform{
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // proposalId => user => UserInfo
     mapping(uint256 => address[]) public votedUsers; // proposalId => votedUsers[]
 
-    mapping(uint256 => mapping(address => uint256)) public gaugesWithVotesIndex; // proposalId => gauge => index
-    mapping(uint256 => address[]) public gaugesWithVotes;  // proposalId => [gauges with votes]
-
     struct Proposal {
         bytes32 baseWeightMerkleRoot; //merkle root to provide user base weights 
         uint256 startTime; //start timestamp
@@ -60,10 +57,6 @@ contract GaugeVotePlatform{
 
     function proposalCount() external view returns(uint256){
         return proposals.length;
-    }
-
-    function gaugesWithVotesCount(uint256 _proposalId) external view returns(uint256){
-        return gaugesWithVotes[_proposalId].length;
     }
 
     function getVoterCount(uint256 _proposalId) external view returns(uint256){
@@ -161,24 +154,9 @@ contract GaugeVotePlatform{
         if(_changeValue > 0){
             //change total
             gaugeTotals[_proposalId][_gauge] += uint256(_changeValue);    
-
-            //check if newly voted on gauge
-            if(gaugesWithVotesIndex[_proposalId][_gauge] == 0) {
-                gaugesWithVotes[_proposalId].push(_gauge);
-                gaugesWithVotesIndex[_proposalId][_gauge] = gaugesWithVotes[_proposalId].length;
-            }
         }else{
             //change total
             gaugeTotals[_proposalId][_gauge] -= uint256(-_changeValue);
-
-            //if gauge becomes zero, remove from voted on list
-            uint256 index = gaugesWithVotesIndex[_proposalId][_gauge];
-            if(gaugeTotals[_proposalId][_gauge] == 0 && index > 0) {
-                gaugesWithVotes[_proposalId][index-1] = gaugesWithVotes[_proposalId][gaugesWithVotes[_proposalId].length-1];
-                gaugesWithVotesIndex[_proposalId][gaugesWithVotes[_proposalId][index-1]] = index;
-                gaugesWithVotes[_proposalId].pop();
-                gaugesWithVotesIndex[_proposalId][_gauge] = 0;
-            }
         }
         emit GaugeTotalChange(_proposalId, _gauge, gaugeTotals[_proposalId][_gauge]);
     }
