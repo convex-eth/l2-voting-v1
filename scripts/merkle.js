@@ -21,9 +21,13 @@ const lockerAbi = [{"inputs":[{"internalType":"address","name":"_user","type":"a
 const delAddress = "0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446";
 const delAbi = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"delegator","type":"address"},{"indexed":true,"internalType":"bytes32","name":"id","type":"bytes32"},{"indexed":true,"internalType":"address","name":"delegate","type":"address"}],"name":"ClearDelegate","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"delegator","type":"address"},{"indexed":true,"internalType":"bytes32","name":"id","type":"bytes32"},{"indexed":true,"internalType":"address","name":"delegate","type":"address"}],"name":"SetDelegate","type":"event"},{"inputs":[{"internalType":"bytes32","name":"id","type":"bytes32"}],"name":"clearDelegate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"delegation","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"id","type":"bytes32"},{"internalType":"address","name":"delegate","type":"address"}],"name":"setDelegate","outputs":[],"stateMutability":"nonpayable","type":"function"}];
 
+const voteBalanceAddress = "0x81768695e9fDdA232491bec5B21Fd1BC1116F917";
+const voteBalanceAbi = [{"inputs":[{"internalType":"address","name":"_user","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
 const lockerMulti = new Contract(lockerAddress, lockerAbi);
 const locker = new ethers.Contract(lockerAddress, lockerAbi, provider);
 const delegation = new Contract(delAddress, delAbi);
+const voteBalance = new Contract(voteBalanceAddress, voteBalanceAbi);
 
 // set local timezone to UTC
 process.env.TZ = 'UTC';
@@ -134,7 +138,7 @@ module.exports = {
             var calldata = [];
             var addresses = [];
             for(var c = start; c <= finish; c++){
-                calldata.push(lockerMulti.balanceAtEpochOf(currentEpoch, addressArray[c]));
+                calldata.push(voteBalance.balanceOf(addressArray[c]));
                 addresses.push(addressArray[c]);
             }
             //console.log(calldata);
