@@ -97,7 +97,7 @@ contract GaugeVotePlatform{
         //remove from gauge totals
         if(userInfo[proposalId][_account].voteStatus > 0){
             for(uint256 i = 0; i < votes[proposalId][_account].gauges.length; i++) {
-                _changeGaugeTotal(proposalId, votes[proposalId][_account].gauges[i], -(int256(votes[proposalId][_account].weights[i])*(userWeight/int256(max_weight))) );
+                _changeGaugeTotal(proposalId, votes[proposalId][_account].gauges[i], -(int256(votes[proposalId][_account].weights[i])*userWeight/int256(max_weight)) );
             }
         }
 
