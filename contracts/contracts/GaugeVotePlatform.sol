@@ -116,7 +116,7 @@ contract GaugeVotePlatform{
 
         //update gauge totals
         for(uint256 i = 0; i < _weights.length; i++) {
-            _changeGaugeTotal(proposalId,_gauges[i], int256(_weights[i])*(userWeight/int256(max_weight)) );
+            _changeGaugeTotal(proposalId,_gauges[i], int256(_weights[i])*userWeight/int256(max_weight) );
         }
         emit VoteCast(proposalId, _account, _gauges, _weights);
 
@@ -384,10 +384,10 @@ contract GaugeVotePlatform{
     event OperatorSet(address indexed op, bool active);
     event EqualizerAccountSet(address indexed eq, bool active);
 
-    constructor(address _guageRegistry, address _surrogateRegistry, address _userManager) {
+    constructor(address _gaugeRegistry, address _surrogateRegistry, address _userManager) {
         owner = msg.sender;
         operators[msg.sender] = true;
-        gaugeRegistry = _guageRegistry;
+        gaugeRegistry = _gaugeRegistry;
         surrogateRegistry = _surrogateRegistry;
         userManager = _userManager;
     }
