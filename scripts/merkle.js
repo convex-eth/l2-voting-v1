@@ -202,6 +202,8 @@ module.exports = {
                 var delegate = ethers.utils.getAddress(delData[d]);
                 if(delegate != ethers.constants.AddressZero) {
                     cache.userDelegation[addresses[d]] = delegate;
+                } else {   
+                    cache.userDelegation[addresses[d]] = addresses[d];
                 }
             }
         }));
