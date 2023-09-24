@@ -10,13 +10,19 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
     address public pendingowner;
     address public operator;
     address public bridge;
+    address public gaugePlatform;
+    address public daoPlatform;
 
     uint256 public constant epochDuration = 86400 * 7;
+
+    mapping(address => mapping(uint256 => uint256)) public userWeightAtEpoch;
 
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);
     event OperatorSet(address _op);
     event BridgeSet(address _bridge);
+    event SetPlatforms(address _gaugePlatform, address _daoplatform);
+    event SetUserWeightAtEpoch(address indexed _user, uint256 indexed _epoch, uint256 _weight);
 
     constructor() {
         owner = msg.sender;
@@ -49,6 +55,12 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
         emit BridgeSet(_bridge);
     }
 
+    function setVotePlatforms(address _gaugePlatform, address _daoplatform) external onlyOwner{
+        gaugePlatform = _gaugePlatform;
+        daoPlatform = _daoplatform;
+        emit SetPlatforms(_gaugePlatform, _daoplatform);
+    }
+
     modifier onlyOwner() {
         require(owner == msg.sender, "!owner");
         _;
@@ -64,11 +76,20 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
         }
     }
 
-    function updateWeight(address _voteplatform, address _user, uint256 _epoch, uint256 _proposalId, uint256 _weight) public {
+    function updateWeight(address _user, uint256 _epoch, uint256 _weight) public {
         require(msg.sender == address(this) || msg.sender == owner,"!self");
         require(_epoch == currentEpoch(), "!epoch");
 
-        //update voting platform's user weight for the specified proposal id
-        IVotePlatform(_voteplatform).updateUserWeight(_proposalId, _user, _weight);
+        //update local
+        userWeightAtEpoch[_user][_epoch] = _weight;
+        emit SetUserWeightAtEpoch(_user, _epoch, _weight);
+
+        //update each voting platform's user weight for any live proposals
+        if(gaugePlatform != address(0)){
+            IVotePlatform(gaugePlatform).updateUserWeight(_user, _weight);
+        }
+        if(daoPlatform != address(0)){
+            IVotePlatform(daoPlatform).updateUserWeight(_user, _weight);
+        }
     }
 }
