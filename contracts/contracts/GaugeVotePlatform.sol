@@ -123,9 +123,12 @@ contract GaugeVotePlatform{
         require(totalweight <= max_weight, "max weight");
 
         //update user base weight from manager
-        int256 epochWeight = int256(IUserManager(userManager).userWeightAtEpoch(_account, currentEpoch()) );
-        if( epochWeight > userbase ){
+        uint256 epochWeight = IUserManager(userManager).userWeightAtEpoch(_account, currentEpoch());
+        if( epochWeight > uint256(userbase) ){
+            //update base weight
             userInfo[proposalId][_account].baseWeight = epochWeight;
+            //update total weight
+            userWeight = int256(epochWeight) + userInfo[proposalId][_account].adjustedWeight;
             emit UserWeightChange(proposalId, _account,  epochWeight,  userInfo[proposalId][_account].adjustedWeight);
         }
 
