@@ -49,6 +49,7 @@ contract GaugeVotePlatform{
     }
 
     mapping(uint256 => mapping(address => uint256)) public gaugeTotals; // proposalId => gauge => totalVlCVX
+    mapping(uint256 => uint256) public voteTotals; // proposalId => totalVlcvx for all gauges
 
     Proposal[] public proposals;
     mapping(uint256 => mapping(address => Vote)) internal votes; // proposalId => user => Vote
@@ -143,6 +144,9 @@ contract GaugeVotePlatform{
             userInfo[proposalId][_account].voteStatus = msg.sender == _account ? uint8(VoteStatus.Voted) : uint8(VoteStatus.VotedViaSurrogate);
             votedUsers[proposalId].push(_account);
 
+            //add to total votes
+            voteTotals[proposalId] += uint256(userWeight);
+
             //since user voted, take weight away from delegate
             address delegate = userInfo[proposalId][_account].delegate;
             if(delegate != _account) {
@@ -150,12 +154,17 @@ contract GaugeVotePlatform{
                 //if delegate already voted, update global gauge totals
                 if(userInfo[proposalId][delegate].voteStatus > 0){
                     int256 delegateweight = int256(userInfo[proposalId][delegate].baseWeight) + userInfo[proposalId][delegate].adjustedWeight;
+                    
                     //remove from gauge totals
                     for(uint256 i = 0; i < votes[proposalId][delegate].gauges.length; i++) {
                         int256 difference = int256(votes[proposalId][delegate].weights[i])*(delegateweight-userbase)/int256(max_weight);
                         difference -= int256(votes[proposalId][delegate].weights[i])*delegateweight/int256(max_weight);
                         _changeGaugeTotal(proposalId,votes[proposalId][delegate].gauges[i],difference);
                     }
+
+                    //remove user base from total votes (as it was included in delegate's adjustedWeight)
+                    //only needed if delegate already voted
+                    voteTotals[proposalId] -= uint256(userbase);
                 }
 
                 //update delegate adjusted weight
