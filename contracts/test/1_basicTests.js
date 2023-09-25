@@ -275,6 +275,7 @@ contract("Deploy System and test", async accounts => {
     var _gauges = [gaugeA, gaugeB];
     var _gaugesB = [gaugeB, gaugeC];
     var _gaugesC = [gaugeD];
+    var allgauges = [gaugeA, gaugeB, gaugeC, gaugeD];
     var _weights = [5000, 5000];
     var _weightsB = [9000, 1000];
     var _weightsC = [10000];
@@ -284,17 +285,13 @@ contract("Deploy System and test", async accounts => {
     // var _delegate = userX;
 
   
-    var tx = await gaugeVotePlatform.voteWithProofs(userB, _gauges, _weights, tree.users[userB].proof, userBase[userB], userAdjusted[userB], userDelegation[userB], {from:userB,gasPrice:0});
+    var tx = await gaugeVotePlatform.voteWithProofs(userB, _gauges, _weights, tree.users[userB].proof, userBase[userB], userAdjusted[userB], userDelegation[userB], {from:userB});
     console.log("\nvote user B ("+userB+"), gas: " +tx.receipt.gasUsed);
     await gaugeVotePlatform.getVote(pcnt-1, userB).then(a=>console.log(JSON.stringify(a)))
 
     const showVotedGauges = async (_proposalId) => {
-      var votedgaugeCount = await gaugeVotePlatform.gaugesWithVotesCount(_proposalId);
-      console.log("\n--- gauge totals ---")
-      console.log("voted gauge count: " +votedgaugeCount);
-
-      for(var i=0; i <votedgaugeCount; i++){
-        var votedgauge = await gaugeVotePlatform.gaugesWithVotes(_proposalId, i);
+      for(var i=0; i <allgauges.length; i++){
+        var votedgauge = allgauges[i];
         var gaugeTotal = await gaugeVotePlatform.gaugeTotals(_proposalId,votedgauge);
         console.log("gauge " +i +": " +votedgauge +" -> " +gaugeTotal);
       }
@@ -310,7 +307,7 @@ contract("Deploy System and test", async accounts => {
     await showVotedGauges(pcnt-1);
 
     console.log("\nupdate A's weight...");
-    await userManager.updateWeight(gaugeVotePlatform.address, userA, currentEpoch, pcnt-1, 5000,{from:deployer});
+    await userManager.updateWeight(userA, currentEpoch, 5000,{from:deployer});
     console.log("updated A (update pattern: already voted user update)");
 
     await gaugeVotePlatform.getVote(pcnt-1, userA).then(a=>console.log(JSON.stringify(a)))
