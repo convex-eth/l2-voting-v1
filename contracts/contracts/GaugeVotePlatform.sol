@@ -3,11 +3,12 @@ pragma solidity ^0.8.10;
 
 import "./interfaces/IGaugeRegistry.sol";
 import "./interfaces/ISurrogateRegistry.sol";
+import "./interfaces/IUserManager.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 
 /*
-    Main Gauge Vote Platform contract
+    Gauge Vote Platform
 */
 contract GaugeVotePlatform{
 
@@ -19,6 +20,8 @@ contract GaugeVotePlatform{
     address public immutable surrogateRegistry;
     address public immutable userManager;
 
+    uint256 public constant epochDuration = 86400 * 7;
+
     enum VoteStatus{
         None,
         VotedViaSurrogate,
@@ -28,7 +31,6 @@ contract GaugeVotePlatform{
     struct UserInfo {
         uint256 baseWeight; //original weight
         int256 adjustedWeight; //signed weight change via delegation change or updated user weight
-        uint256 pendingWeight; //weight updated but awaiting proof
         address delegate;
         uint8 voteStatus;
     }
@@ -52,8 +54,12 @@ contract GaugeVotePlatform{
     mapping(uint256 => mapping(address => Vote)) internal votes; // proposalId => user => Vote
     uint256 public constant max_weight = 10000;
 
-    mapping(address => bool) equalizerAccounts;
+    mapping(address => bool) public equalizerAccounts;
     uint256 public constant overtime = 10 minutes;
+
+    function currentEpoch() public view returns (uint256) {
+        return block.timestamp/epochDuration*epochDuration;
+    }
 
     function proposalCount() external view returns(uint256){
         return proposals.length;
@@ -91,8 +97,10 @@ contract GaugeVotePlatform{
         require(_gauges.length == _weights.length, "mismatch");
         require(userInfo[proposalId][_account].delegate != address(0), "!proof");
 
+        //get user base weight now so that delegate update uses proper weight
+        int256 userbase = int256(userInfo[proposalId][_account].baseWeight);
         //get total user weight
-        int256 userWeight = int256(userInfo[proposalId][_account].baseWeight)+userInfo[proposalId][_account].adjustedWeight;
+        int256 userWeight = userbase+userInfo[proposalId][_account].adjustedWeight;
 
         //remove from gauge totals
         if(userInfo[proposalId][_account].voteStatus > 0){
@@ -114,6 +122,13 @@ contract GaugeVotePlatform{
         }
         require(totalweight <= max_weight, "max weight");
 
+        //update user base weight from manager
+        int256 epochWeight = int256(IUserManager(userManager).userWeightAtEpoch(_account, currentEpoch()) );
+        if( epochWeight > userbase ){
+            userInfo[proposalId][_account].baseWeight = epochWeight;
+            emit UserWeightChange(proposalId, _account,  epochWeight,  userInfo[proposalId][_account].adjustedWeight);
+        }
+
         //update gauge totals
         for(uint256 i = 0; i < _weights.length; i++) {
             _changeGaugeTotal(proposalId,_gauges[i], int256(_weights[i])*userWeight/int256(max_weight) );
@@ -128,7 +143,6 @@ contract GaugeVotePlatform{
             //since user voted, take weight away from delegate
             address delegate = userInfo[proposalId][_account].delegate;
             if(delegate != _account) {
-                int256 userbase = int256(userInfo[proposalId][_account].baseWeight);
 
                 //if delegate already voted, update global gauge totals
                 if(userInfo[proposalId][delegate].voteStatus > 0){
@@ -144,7 +158,6 @@ contract GaugeVotePlatform{
                 //update delegate adjusted weight
                 userInfo[proposalId][delegate].adjustedWeight -= userbase;
                 emit UserWeightChange(proposalId, delegate,  userInfo[proposalId][delegate].baseWeight,  userInfo[proposalId][delegate].adjustedWeight);
-                
             }
         }
     }
@@ -207,37 +220,10 @@ contract GaugeVotePlatform{
         if(_delegate == address(0)){
             _delegate = _account;
         }
+
         //record delegate used for this proposal.
         userInfo[_proposalId][_account].delegate = _delegate;
-
-        if(userInfo[_proposalId][_account].pendingWeight > 0){
-            
-            //add the pending weight onto the delegation weight
-            if(_delegate != _account) {
-                int256 adjustedDifference = int256(userInfo[_proposalId][_account].pendingWeight) - int256(_baseWeight);
-                // check if delegate has voted
-                if(userInfo[_proposalId][_delegate].voteStatus > 0) {
-                    // remove original weight from gauge totals
-                    int256 delegateweight = int256(userInfo[_proposalId][_delegate].baseWeight) + userInfo[_proposalId][_delegate].adjustedWeight;
-                    for(uint256 i = 0; i < votes[_proposalId][_delegate].gauges.length; i++) {
-                        //get difference in weight
-                        int256 difference = int256(votes[_proposalId][_delegate].weights[i])*(delegateweight+adjustedDifference)/int256(max_weight);
-                        difference -= int256(votes[_proposalId][_delegate].weights[i])*delegateweight/int256(max_weight);
-                        //change gauge totals
-                        _changeGaugeTotal(_proposalId, votes[_proposalId][_delegate].gauges[i], difference );
-                    }
-
-                }
-                //merkle info has base weight already attributed to the user so add the difference
-                userInfo[_proposalId][_delegate].adjustedWeight += adjustedDifference;
-                emit UserWeightChange(_proposalId, _delegate,  userInfo[_proposalId][_delegate].baseWeight,  userInfo[_proposalId][_delegate].adjustedWeight);
-            }
-            userInfo[_proposalId][_account].baseWeight = userInfo[_proposalId][_account].pendingWeight;
-            userInfo[_proposalId][_account].pendingWeight = 0;
-        }else{
-            userInfo[_proposalId][_account].baseWeight = _baseWeight; 
-        }
-        
+        userInfo[_proposalId][_account].baseWeight = _baseWeight;
         userInfo[_proposalId][_account].adjustedWeight += _adjustedWeight;
         emit UserWeightChange(_proposalId, _account, userInfo[_proposalId][_account].baseWeight,  userInfo[_proposalId][_account].adjustedWeight);
     }
@@ -274,62 +260,6 @@ contract GaugeVotePlatform{
         emit ForceEndProposal(proposalId);
     }
 
-
-    //update a user's weight
-    //if already voted, just update self
-    //if proofs supplied, user is still delegating so adjust delegate's weight
-    //if no proofs yet, set weight as pending to be processed later
-    function updateUserWeight(uint256 _proposalId, address _user, uint256 _newWeight) external onlyUserManager{
-        require(block.timestamp >= proposals[_proposalId].startTime, "!start");
-        require(block.timestamp <= proposals[_proposalId].endTime, "!end");
-
-        //if voted, delegation weight has already been adjusted so just adjust the user's base
-        if(userInfo[_proposalId][_user].voteStatus > 0){
-            // adjust gauge totals
-            uint256 userbase = userInfo[_proposalId][_user].baseWeight;
-            int256 useradjusted = int256(userInfo[_proposalId][_user].baseWeight) + userInfo[_proposalId][_user].adjustedWeight;
-            for(uint256 i = 0; i < votes[_proposalId][_user].gauges.length; i++) {
-                //change gauge total by difference
-                int256 difference = int256(votes[_proposalId][_user].weights[i])*(int256(_newWeight)+useradjusted)/int256(max_weight);
-                difference -= int256(votes[_proposalId][_user].weights[i])*(int256(userbase)+useradjusted)/int256(max_weight);
-                _changeGaugeTotal(_proposalId,votes[_proposalId][_user].gauges[i], difference);
-            }
-
-            userInfo[_proposalId][_user].baseWeight = _newWeight;
-            emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
-        }else if(isProofSupplied(_proposalId, _user)){
-
-            //proof has been supplied and thus delegate is known. modify delegate's adjusted weight and user's base
-            
-            //adjust delegate first
-            address delegate = userInfo[_proposalId][_user].delegate;
-            if(delegate != _user) {
-                int256 adjustedDifference = int256(_newWeight) - int256(userInfo[_proposalId][_user].baseWeight);
-                // check if delegate has voted
-                if(userInfo[_proposalId][delegate].voteStatus > 0) {
-                    // remove original weight from gauge totals
-                    int256 delegateweight = int256(userInfo[_proposalId][delegate].baseWeight) + userInfo[_proposalId][delegate].adjustedWeight;
-                    for(uint256 i = 0; i < votes[_proposalId][delegate].gauges.length; i++) {
-                        //change gauge total by difference
-                        int256 difference = int256(votes[_proposalId][delegate].weights[i])*(delegateweight+adjustedDifference)/int256(max_weight);
-                        difference -= int256(votes[_proposalId][delegate].weights[i])*delegateweight/int256(max_weight);
-                        _changeGaugeTotal(_proposalId, votes[_proposalId][delegate].gauges[i], difference);
-                    }
-                }
-                userInfo[_proposalId][delegate].adjustedWeight += adjustedDifference;
-                emit UserWeightChange(_proposalId, delegate,  userInfo[_proposalId][delegate].baseWeight,  userInfo[_proposalId][delegate].adjustedWeight);
-            }
-
-            //set base weight last
-            userInfo[_proposalId][_user].baseWeight = _newWeight;
-            emit UserWeightChange(_proposalId, _user, _newWeight,  userInfo[_proposalId][_user].adjustedWeight);
-        }else{
-            //if no proof supplied yet, save to a pending weight. supply proofs to apply
-            userInfo[_proposalId][_user].pendingWeight = _newWeight;
-            emit UserWeightPending(_proposalId, _user, _newWeight);
-        }
-    }
-
     function transferOwnership(address _owner) external onlyOwner{
         pendingowner = _owner;
         emit TransferOwnership(_owner);
@@ -351,7 +281,6 @@ contract GaugeVotePlatform{
         equalizerAccounts[_eq] = _active;
         emit EqualizerAccountSet(_eq, _active);
     }
-
 
     modifier onlyOwner() {
         require(owner == msg.sender, "!owner");
@@ -377,7 +306,6 @@ contract GaugeVotePlatform{
     event NewProposal(uint256 indexed id, bytes32 merkle, uint256 start, uint256 end);
     event ForceEndProposal(uint256 indexed id);
     event UserWeightChange(uint256 indexed pid, address indexed user, uint256 baseWeight, int256 adjustedWeight);
-    event UserWeightPending(uint256 indexed pid, address indexed user, uint256 pendingWeight);
     event GaugeTotalChange(uint256 indexed pid, address indexed gauge, uint256 newWeight);
     event TransferOwnership(address pendingOwner);
     event AcceptedOwnership(address newOwner);

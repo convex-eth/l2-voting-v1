@@ -10,8 +10,6 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
     address public pendingowner;
     address public operator;
     address public bridge;
-    address public gaugePlatform;
-    address public daoPlatform;
 
     uint256 public constant epochDuration = 86400 * 7;
 
@@ -55,12 +53,6 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
         emit BridgeSet(_bridge);
     }
 
-    function setVotePlatforms(address _gaugePlatform, address _daoplatform) external onlyOwner{
-        gaugePlatform = _gaugePlatform;
-        daoPlatform = _daoplatform;
-        emit SetPlatforms(_gaugePlatform, _daoplatform);
-    }
-
     modifier onlyOwner() {
         require(owner == msg.sender, "!owner");
         _;
@@ -80,16 +72,8 @@ contract UpdateUserWeight is IBridgeMessageReceiver {
         require(msg.sender == address(this) || msg.sender == owner,"!self");
         require(_epoch == currentEpoch(), "!epoch");
 
-        //update local
+        //update user weight at current epoch
         userWeightAtEpoch[_user][_epoch] = _weight;
         emit SetUserWeightAtEpoch(_user, _epoch, _weight);
-
-        //update each voting platform's user weight for any live proposals
-        if(gaugePlatform != address(0)){
-            IVotePlatform(gaugePlatform).updateUserWeight(_user, _weight);
-        }
-        if(daoPlatform != address(0)){
-            IVotePlatform(daoPlatform).updateUserWeight(_user, _weight);
-        }
     }
 }
