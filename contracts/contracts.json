@@ -19,7 +19,7 @@
             "gaugeRegistry": "0x028E06305e63db21D792346b136323863993cfAd",
             "surrogateRegistry": "0x8E42b11Ba9458592816B44896CE3fd40eEc0B2Bf",
             "userWeightManager": "0x2ba0fcc984b0EdF8A47097aDd4839fbE633522A6",
-            "gaugeVotePlatform": "0xfAbCcfc3E63aD25Ed7613b2147fF4b9042d2CcAF"
+            "gaugeVotePlatform": "0x371b805eDFdF180053A0AB5D8D6C90ddEF93C14c"
         }
     }
 }
